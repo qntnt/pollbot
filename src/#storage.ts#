@@ -1,0 +1,10 @@
+import { Ballot, Poll, UserId } from "./models";
+
+export interface Storage {
+
+    getPoll(id: string): Poll
+
+    getBallot(poll_id: string, user_id: UserId): Ballot
+
+    
+}
