@@ -61,6 +61,14 @@ export class FirestoreStorage implements Storage {
 
     async getGuildData(guildId: string): Promise<GuildData | undefined> {
         const snapshot = await this.guildCollection.doc(guildId).get()
+        if (!snapshot.exists) {
+            const guildData = {
+                id: guildId,
+                admins: {}
+            }
+            await this.createGuildData(guildData)
+            return guildData
+        }
         return snapshot.data() as GuildData | undefined
     }
 

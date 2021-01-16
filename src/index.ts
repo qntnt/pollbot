@@ -5,17 +5,6 @@ import storage from './storage'
 
 const client = new Discord.Client()
 
-storage.listGuildData().then((guildIds) => {
-    client.guilds.cache.forEach(async g => {
-        if (g.id! in guildIds) {
-            await storage.createGuildData({
-                id: g.id,
-                admins: {},
-            })
-        }
-    })
-})
-
 client.on('ready', async () => {
     console.log(`Logged in as ${client.user?.tag ?? 'undefined'}`)
 })
@@ -40,6 +29,7 @@ function isCommand(message: Discord.Message, command: string): boolean {
 }
 
 client.on('message', async message => {
+    // Ignore bot messages
     if (message.author.id === client.user?.id) return
 
     if (message.channel.type === 'dm') {
@@ -60,6 +50,9 @@ client.on('message', async message => {
     }
     if (isCommand(message, commands.POLL_RESULTS_COMMAND)) {
         return await commands.pollResults(message)
+    }
+    if (isCommand(message, commands.AUDIT_POLL_COMMAND)) {
+        return await commands.auditPoll(message)
     }
     return await commands.help(message)
 })

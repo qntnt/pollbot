@@ -31,8 +31,7 @@ function addMatrices(matrixA: OptionMatrix, matrixB: OptionMatrix): OptionMatrix
     return result
 }
 
-
-function buildMatrix(options: string[], votes: Vote[]): OptionMatrix {
+export function buildMatrix(options: string[], votes: Vote[]): OptionMatrix {
     return votes.reduce((accMatrix, vote) => {
         const matrix = initMatrix(options)
         options.forEach(runner => {
@@ -267,7 +266,6 @@ export function rankedPairs(options: string[], votes: Vote[]): RankingResults | 
     if (votes.length === 0) return
 
     const matrix = buildMatrix(options, votes)
-    console.log(showMatrix(matrix))
     const rankedPairs = buildRankedPairs(options, matrix)
     const sorted = sortRankedPairs(rankedPairs)
     const locked = lockRankedPairs(sorted)

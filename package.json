@@ -29,6 +29,7 @@
         "@types/moment-timezone": "^0.5.30",
         "@types/node": "^14.14.20",
         "columnify": "^1.5.4",
+        "csv": "^5.3.2",
         "discord.js": "^12.5.1",
         "firebase": "^8.2.2",
         "firebase-admin": "^9.4.2",

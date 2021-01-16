@@ -1,7 +1,7 @@
 import columnify from "columnify";
 import { Ballot, Poll } from "../models";
 import { rankedPairs, showMatrix } from "./condorcet";
-import { RankingResults, Vote, RankingType } from "./interfaces";
+import { RankingResults, RankingType, Vote } from "./interfaces";
 
 export function computeResults(poll: Poll, ballots: Ballot[]): RankingResults | undefined {
     const optionKeys = Object.keys(poll?.options ?? {})

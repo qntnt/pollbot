@@ -1,18 +1,22 @@
-import { Message, MessageReaction, PartialUser, User } from 'discord.js'
+import { Guild, Message, MessageAttachment, MessageReaction, PartialUser, User } from 'discord.js'
+import moment from 'moment-timezone'
 import { Option, OptionKey, PollConfig, PollId, Vote } from './models'
 import storage from './storage'
-import moment from 'moment-timezone'
-import { rankedPairs, showMatrix } from './voting/condorcet'
-import * as votingInterfaces from './voting/interfaces'
-import columnify from 'columnify'
 import { computeResults, resultsSummary } from './voting'
+import { showMatrix } from './voting/condorcet'
+import { stringify } from 'csv'
+import { WriteStream } from 'fs'
+import { Writable } from 'stream'
 
 export const POLLBOT_PREFIX = "pollbot"
 export const CREATE_POLL_COMMAND = `${POLLBOT_PREFIX} poll`
 export const CLOSE_POLL_COMMAND = `${POLLBOT_PREFIX} close`
 export const POLL_RESULTS_COMMAND = `${POLLBOT_PREFIX} results`
+export const AUDIT_POLL_COMMAND = `${POLLBOT_PREFIX} audit`
 
 export const POLL_ID_PREFIX = '> poll#'
+
+
 
 export async function createPoll(message: Message) {
     const command = message.content.substring(
@@ -76,11 +80,8 @@ export async function closePoll(message: Message) {
     if (!poll) {
         return await message.channel.send(`I couldn't find poll ${pollId}`)
     }
-    const guild = await storage.getGuildData(poll.guildId)
-    if (!guild) {
-        return await message.channel.send(`This poll is missing server data. I can't close it now.`)
-    }
-    if (message.author.id !== poll.ownerId && message.author.id! in guild.admins) {
+    const admin = isAdmin(poll.guildId, message.author)
+    if (message.author.id !== poll.ownerId && !admin) {
         return await message.channel.send(`You don't have permission to close this poll`)
     }
     const newPoll = storage.updatePoll(poll.id, {
@@ -233,4 +234,75 @@ export async function submitBallot(message: Message) {
 
 export async function help(message: Message) {
     message.channel.send('Commands: `poll`, `close`, `results`')
+}
+
+function toCSVRow(columns: string[], record: Record<string, string | number | undefined>): string {
+    return columns.map(col => record[col]).join(',')
+}
+
+function toCSVRows(columns: string[], records: Record<string, string | number | undefined>[]) {
+    return records.map(rec => toCSVRow(columns, rec)).join('\n')
+}
+
+function toCSV(columns: string[], records: Record<string, string | number | undefined>[]) {
+    const header = columns.join(',')
+    return [header, toCSVRows(columns, records)].join('\n')
+}
+
+async function isAdmin(guildId: string, user: User): Promise<boolean> {
+    const guildData = await storage.getGuildData(guildId)
+    const admins = guildData?.admins ?? {}
+    return admins[user.id] === true
+}
+
+export async function auditPoll(message: Message) {
+    const pollId = message.content.substring(
+        AUDIT_POLL_COMMAND.length,
+        message.content.length
+    ).trim()
+
+    const poll = await storage.getPoll(pollId)
+    if (!poll) {
+        return message.channel.send(`Poll ${pollId} not found.`)
+    }
+    const admin = await isAdmin(poll.guildId, message.author)
+    if (!admin) {
+        return message.channel.send(`You are not an admin for this bot instance. Only admins may audit poll results and export ballot data.`)
+    }
+
+    const ballots = await storage.listBallots(poll.id)
+
+    const results = computeResults(poll, ballots)
+    if (!results) {
+        return message.channel.send(`There was an issue computing results`)
+    }
+    const summary = resultsSummary(poll, results)
+    const matrixSummary = showMatrix(results.matrix)
+    await message.channel.send(
+        summary +
+        '\n```' +
+        matrixSummary +
+        '```'
+    )
+
+    const options = Object.values(poll.options).sort()
+    const columns = ['ballotId', 'createdAt', 'updatedAt', 'userId', 'userName', ...options]
+    const csvText = toCSV(columns, ballots.map(b => {
+        const votes: Record<string, number | undefined> = {}
+        Object.values(b.votes).forEach(v => {
+            votes[v.option] = v.rank
+        })
+        return {
+            ballotId: b.id,
+            createdAt: moment(b.createdAt).toISOString(),
+            updatedAt: moment(b.updatedAt).toISOString(),
+            userId: b.userId,
+            userName: b.userName,
+            ...votes,
+        }
+    }))
+    const csvBuffer = Buffer.from(csvText)
+    const attachment = new MessageAttachment(csvBuffer, `poll_${poll.id}_votes.csv`)
+    await message.author.send(attachment)
+    console.log(csvText)
 }
