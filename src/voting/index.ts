@@ -31,14 +31,19 @@ export function resultsSummary(poll: Poll, results: RankingResults): string {
             option: poll?.options[key],
             score,
         })), {
-        columns: ['rank', 'key', 'option', 'score'],
+        columns: ['rank', 'option', 'key',],
         align: 'right',
         columnSplitter: ' | '
     })
+    const metrics = (
+        `> Ballot count: ${results.metrics.voteCount}\n` +
+        `> Time to compute: ${results.metrics.computeDuration.toFormat('S')}ms\n`
+    )
     return (
         '```\n' +
         table +
         '```\n' +
+        metrics +
         footer
     )
 }

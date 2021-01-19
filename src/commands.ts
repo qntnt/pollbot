@@ -1,4 +1,4 @@
-import { Guild, Message, MessageAttachment, MessageReaction, PartialUser, User } from 'discord.js'
+import { Guild, GuildMember, Message, MessageAttachment, MessageReaction, PartialUser, User } from 'discord.js'
 import moment from 'moment-timezone'
 import { Option, OptionKey, PollConfig, PollId, Vote } from './models'
 import storage from './storage'
@@ -15,8 +15,6 @@ export const POLL_RESULTS_COMMAND = `${POLLBOT_PREFIX} results`
 export const AUDIT_POLL_COMMAND = `${POLLBOT_PREFIX} audit`
 
 export const POLL_ID_PREFIX = '> poll#'
-
-
 
 export async function createPoll(message: Message) {
     const command = message.content.substring(
@@ -75,12 +73,14 @@ export async function closePoll(message: Message) {
         CLOSE_POLL_COMMAND.length,
         message.content.length
     ).trim()
-
+    if (pollId === '') {
+        return await closePollHelp(message)
+    }
     const poll = await storage.getPoll(pollId)
     if (!poll) {
         return await message.channel.send(`I couldn't find poll ${pollId}`)
     }
-    const admin = isAdmin(poll.guildId, message.author)
+    const admin = isAdmin(message.member ?? undefined)
     if (message.author.id !== poll.ownerId && !admin) {
         return await message.channel.send(`You don't have permission to close this poll`)
     }
@@ -106,13 +106,19 @@ export async function closePoll(message: Message) {
     }
 }
 
-async function closePollHelp(message: Message) { }
+async function closePollHelp(message: Message) {
+    return await message.channel.send('Close polls with this command format:\n`pollbot close <pollId>`')
+}
 
 export async function pollResults(message: Message) {
     const pollId = message.content.substring(
         POLL_RESULTS_COMMAND.length,
         message.content.length
     ).trim()
+
+    if (pollId === '') {
+        return await pollResultsHelp(message)
+    }
 
     const poll = await storage.getPoll(pollId)
     if (!poll) {
@@ -131,7 +137,9 @@ export async function pollResults(message: Message) {
     return await message.channel.send(summary)
 }
 
-async function pollResultsHelp(message: Message) { }
+async function pollResultsHelp(message: Message) {
+    return await message.channel.send('View poll results with this command format:\n`pollbot results <pollId>`')
+}
 
 const POLL_EXPR = new RegExp(`^${POLL_ID_PREFIX}(.+)\n`)
 
@@ -177,6 +185,10 @@ export async function submitBallot(message: Message) {
     const history = await message.channel.messages.fetch({ limit })
     const lastBallotText = history.find(m => m.content.startsWith(POLL_ID_PREFIX))
 
+    if (message.content.toLowerCase().startsWith(POLLBOT_PREFIX)) {
+        return await message.channel.send('DMs are for submitting ballots. Manage polls in public channels.')
+    }
+
     const pollId = extractPollId(lastBallotText?.content)
     if (!pollId) {
         return await message.channel.send(`Could not find a pollId in the last ${limit} messages`)
@@ -187,7 +199,6 @@ export async function submitBallot(message: Message) {
         return await message.channel.send(`Could not find a poll with id ${pollId}`)
     }
 
-    console.log(poll.closesAt)
     if (poll.closesAt < moment().toDate()) {
         return await message.channel.send(`Poll ${poll.id} is closed.`)
     }
@@ -233,7 +244,7 @@ export async function submitBallot(message: Message) {
 }
 
 export async function help(message: Message) {
-    message.channel.send('Commands: `poll`, `close`, `results`')
+    message.channel.send('Commands: `poll`, `close`, `results`, `audit`')
 }
 
 function toCSVRow(columns: string[], record: Record<string, string | number | undefined>): string {
@@ -249,10 +260,8 @@ function toCSV(columns: string[], records: Record<string, string | number | unde
     return [header, toCSVRows(columns, records)].join('\n')
 }
 
-async function isAdmin(guildId: string, user: User): Promise<boolean> {
-    const guildData = await storage.getGuildData(guildId)
-    const admins = guildData?.admins ?? {}
-    return admins[user.id] === true
+async function isAdmin(member?: GuildMember): Promise<boolean> {
+    return member?.hasPermission('ADMINISTRATOR') === true
 }
 
 export async function auditPoll(message: Message) {
@@ -261,11 +270,18 @@ export async function auditPoll(message: Message) {
         message.content.length
     ).trim()
 
+    if (pollId === '') {
+        return await auditPollHelp(message)
+    }
+
     const poll = await storage.getPoll(pollId)
     if (!poll) {
         return message.channel.send(`Poll ${pollId} not found.`)
     }
-    const admin = await isAdmin(poll.guildId, message.author)
+    if (poll.guildId !== message.guild?.id) {
+        return message.channel.send(`Poll ${pollId} does not belong to this server.`)
+    }
+    const admin = await isAdmin(message.member ?? undefined)
     if (!admin) {
         return message.channel.send(`You are not an admin for this bot instance. Only admins may audit poll results and export ballot data.`)
     }
@@ -306,5 +322,8 @@ export async function auditPoll(message: Message) {
     const csvBuffer = Buffer.from(csvText)
     const attachment = new MessageAttachment(csvBuffer, `poll_${poll.id}_votes.csv`)
     await message.author.send(attachment)
-    console.log(csvText)
+}
+
+async function auditPollHelp(message: Message) {
+    return await message.channel.send('Audit poll results with this command format:\n`pollbot audit <pollId>`')
 }
