@@ -1,6 +1,6 @@
 import { Guild, GuildMember, Message, MessageAttachment, MessageReaction, PartialUser, User } from 'discord.js'
 import moment from 'moment-timezone'
-import { Option, OptionKey, PollConfig, PollId, Vote } from './models'
+import { Option, OptionKey, Poll, PollConfig, PollId, Vote } from './models'
 import storage from './storage'
 import { computeResults, resultsSummary } from './voting'
 import { showMatrix } from './voting/condorcet'
@@ -80,7 +80,10 @@ export async function closePoll(message: Message) {
     if (!poll) {
         return await message.channel.send(`I couldn't find poll ${pollId}`)
     }
-    const admin = isAdmin(message.member ?? undefined)
+    const admin = isAdmin(poll, message.member ?? undefined)
+    if (poll.guildId !== message.guild?.id) {
+        return await message.channel.send(`Poll ${poll.id} does not belong to this server`)
+    }
     if (message.author.id !== poll.ownerId && !admin) {
         return await message.channel.send(`You don't have permission to close this poll`)
     }
@@ -260,8 +263,8 @@ function toCSV(columns: string[], records: Record<string, string | number | unde
     return [header, toCSVRows(columns, records)].join('\n')
 }
 
-async function isAdmin(member?: GuildMember): Promise<boolean> {
-    return member?.hasPermission('ADMINISTRATOR') === true
+async function isAdmin(poll: Poll, member?: GuildMember): Promise<boolean> {
+    return member?.hasPermission('ADMINISTRATOR') === true && member.guild.id === poll.guildId
 }
 
 export async function auditPoll(message: Message) {
@@ -281,7 +284,7 @@ export async function auditPoll(message: Message) {
     if (poll.guildId !== message.guild?.id) {
         return message.channel.send(`Poll ${pollId} does not belong to this server.`)
     }
-    const admin = await isAdmin(message.member ?? undefined)
+    const admin = await isAdmin(poll, message.member ?? undefined)
     if (!admin) {
         return message.channel.send(`You are not an admin for this bot instance. Only admins may audit poll results and export ballot data.`)
     }
