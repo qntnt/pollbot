@@ -280,6 +280,8 @@ export async function auditPoll(message: Message) {
     const matrixSummary = showMatrix(results.matrix)
     await message.channel.send(
         summary +
+        'Pairwise Comparison Matrix\n' +
+        '> To read this, each value in a row shows who wins a matchup between candidates\n' +
         '\n```' +
         matrixSummary +
         '```'

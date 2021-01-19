@@ -1,5 +1,6 @@
 import columnify from "columnify";
-import { Ranking, Vote, OptionMatrix, RankingResults } from "./interfaces";
+import { Timer } from "../util/timer";
+import { Ranking, Vote, OptionMatrix, RankingResults, RankingMetrics } from "./interfaces";
 
 function initMatrix(options: string[]): OptionMatrix {
     const m: OptionMatrix = {}
@@ -265,6 +266,7 @@ function sortBy<T>(arr: T[], key: (o: T) => number): T[] {
 export function rankedPairs(options: string[], votes: Vote[]): RankingResults | undefined {
     if (votes.length === 0) return
 
+    const computeTimer = Timer.startTimer()
     const matrix = buildMatrix(options, votes)
     const rankedPairs = buildRankedPairs(options, matrix)
     const sorted = sortRankedPairs(rankedPairs)
@@ -289,10 +291,16 @@ export function rankedPairs(options: string[], votes: Vote[]): RankingResults | 
         }
     })
 
+    const metrics: RankingMetrics = {
+        voteCount: votes.length,
+        computeDuration: computeTimer.endTimer()
+    }
+
     return {
         rankingType: 'rankedPairs',
         rankings,
         matrix,
+        metrics,
     }
 }
 

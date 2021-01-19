@@ -2,7 +2,8 @@ import { computeResults } from '.'
 import { Ballot, Poll, Vote } from '../models'
 import { generateRange } from '../util/range'
 import { DateTime, Duration, Interval } from 'luxon'
-import { Timer, unsafe } from '../util/testing'
+import { unsafe } from '../util/testing'
+import { Timer } from '../util/timer'
 import { showMatrix } from './condorcet'
 
 

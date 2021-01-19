@@ -1,3 +1,4 @@
+import { Duration } from "luxon"
 
 // Inputs
 export type Option = string
@@ -18,8 +19,14 @@ export interface Ranking {
 
 export type RankingType = 'rankedPairs'
 
+export interface RankingMetrics {
+    voteCount: number
+    computeDuration: Duration
+}
+
 export interface RankingResults {
     rankingType: RankingType
     rankings: Ranking[]
     matrix?: OptionMatrix
+    metrics: RankingMetrics
 }
