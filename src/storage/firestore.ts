@@ -12,19 +12,20 @@ export class FirestoreStorage implements Storage {
     ballotCollection = firestore.collection('ballots')
     guildCollection = firestore.collection('guilds')
     counters = firestore.collection('counters')
-    pollIdCounterDoc = this.counters.doc('poll_id')
+    pollIdCounterRef = this.counters.doc('poll_id')
 
-    private async incrementstring(): Promise<string> {
-        const increment = admin.firestore.FieldValue.increment(1)
-        await this.pollIdCounterDoc.update({
-            value: increment
+    private async incrementPollId(): Promise<string> {
+        const newPollId: number = await firestore.runTransaction(async t => {
+            const snapshot = await t.get(this.pollIdCounterRef)
+            const newPollId: number = (snapshot.data()?.value ?? 0) + 1
+            t.update(this.pollIdCounterRef, { value: newPollId })
+            return newPollId
         })
-        const counter = await this.pollIdCounterDoc.get()
-        return counter?.data()?.value?.toString()
+        return newPollId.toString()
     }
 
     async createPoll(pollConfig: PollConfig): Promise<Poll | undefined> {
-        const pollId = await this.incrementstring()
+        const pollId = await this.incrementPollId()
         const now = moment()
         const poll: Poll = {
             ...pollConfig,
