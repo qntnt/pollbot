@@ -26,9 +26,16 @@ export async function createPoll(message: Message) {
         return await createPollHelp(message)
     }
     const topic = command.substring(0, topicEnd)
+    if (topic === '?') {
+        return message.channel.send('You must specify a topic. Example: `pollbot poll What is the best icecream flavor? chocolate, vanilla, mint chip`')
+    }
     const optionsList = command.substring(topicEnd, command.length)
         .split(',')
         .map(o => o.trim())
+        .filter(o => o !== '')
+    if (optionsList.length < 2) {
+        return message.channel.send('You must specify at least two options in a poll.')
+    }
     const options: Record<OptionKey, Option> = {}
     optionsList.forEach((o, i) => {
         const key = String.fromCharCode(97 + i)
