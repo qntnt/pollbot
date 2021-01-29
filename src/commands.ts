@@ -8,7 +8,7 @@ import { stringify } from 'csv'
 import { WriteStream } from 'fs'
 import { Writable } from 'stream'
 
-export const POLLBOT_PREFIX = "pollbot"
+export const POLLBOT_PREFIX = "!pollbot"
 export const CREATE_POLL_COMMAND = `${POLLBOT_PREFIX} poll`
 export const CLOSE_POLL_COMMAND = `${POLLBOT_PREFIX} close`
 export const POLL_RESULTS_COMMAND = `${POLLBOT_PREFIX} results`
@@ -27,7 +27,7 @@ export async function createPoll(message: Message) {
     }
     const topic = command.substring(0, topicEnd)
     if (topic === '?') {
-        return message.channel.send('You must specify a topic. Example: `pollbot poll What is the best icecream flavor? chocolate, vanilla, mint chip`')
+        return message.channel.send(`You must specify a topic. Example: \`${CREATE_POLL_COMMAND} What is the best icecream flavor? chocolate, vanilla, mint chip\``)
     }
     const optionsList = command.substring(topicEnd, command.length)
         .split(',')
@@ -69,9 +69,9 @@ export async function createPoll(message: Message) {
 async function createPollHelp(message: Message) {
     return await message.channel.send(
         `Create polls with this command format:\n` +
-        `\`pollbot poll <topic>? <comma-separated options>\`\n\n` +
+        `\`${CREATE_POLL_COMMAND} <topic>? <comma-separated options>\`\n\n` +
         `Example:\n` +
-        `\`pollbot poll Best food? pizza, pasta, beets\``
+        `\`${CREATE_POLL_COMMAND} Best food? pizza, pasta, beets\``
     )
 }
 
@@ -117,7 +117,7 @@ export async function closePoll(message: Message) {
 }
 
 async function closePollHelp(message: Message) {
-    return await message.channel.send('Close polls with this command format:\n`pollbot close <pollId>`')
+    return await message.channel.send(`Close polls with this command format:\n\`${CLOSE_POLL_COMMAND} <pollId>\``)
 }
 
 export async function pollResults(message: Message) {
@@ -148,7 +148,7 @@ export async function pollResults(message: Message) {
 }
 
 async function pollResultsHelp(message: Message) {
-    return await message.channel.send('View poll results with this command format:\n`pollbot results <pollId>`')
+    return await message.channel.send(`View poll results with this command format:\n\`${POLL_RESULTS_COMMAND} <pollId>\``)
 }
 
 const POLL_EXPR = new RegExp(`^${POLL_ID_PREFIX}(.+)\n`)
@@ -335,5 +335,5 @@ export async function auditPoll(message: Message) {
 }
 
 async function auditPollHelp(message: Message) {
-    return await message.channel.send('Audit poll results with this command format:\n`pollbot audit <pollId>`')
+    return await message.channel.send(`Audit poll results with this command format:\n\`${AUDIT_POLL_COMMAND} <pollId>\``)
 }
