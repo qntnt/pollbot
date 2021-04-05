@@ -162,10 +162,11 @@ function dfs(g: Graph, start: Node, pred: ((node: Node, depth: number) => boolea
 }
 
 function dfsVisited(g: Graph, start: Node, visited: Node[], depth: number, pred: ((node: Node, depth: number) => boolean)): Node | undefined {
+    console.log(start, visited)
     if (pred(start, depth)) {
         return start
     }
-    if (start in visited) {
+    if (visited.indexOf(start) !== -1) {
         return
     }
     if (!g[start]) {
