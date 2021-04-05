@@ -4,8 +4,10 @@ import * as commands from './commands'
 import storage from './storage'
 
 const client = new Discord.Client()
+const context = new commands.Context(client)
+context.init()
 
-client.on('ready', async () => {
+client.once('ready', async () => {
     console.log(`Logged in as ${client.user?.tag ?? 'undefined'}`)
 })
 
@@ -38,12 +40,13 @@ function isCommand(message: Discord.Message, command: string): boolean {
 
 client.on('message', async message => {
     try {
+        const ctx = context.withMessage(message)
         // Ignore bot messages
         if (message.author.id === client.user?.id) return
 
         if (message.channel.type === 'dm') {
             // Direct messages are votes
-            return await commands.submitBallot(message)
+            return await commands.submitBallot(ctx, message)
         }
 
         if (message.channel.type !== 'text') return
@@ -52,25 +55,26 @@ client.on('message', async message => {
             return
         }
         if (isCommand(message, commands.CREATE_POLL_COMMAND)) {
-            return await commands.createPoll(message)
+            return await commands.createPoll(ctx, message)
         }
         if (isCommand(message, commands.CLOSE_POLL_COMMAND)) {
-            return await commands.closePoll(message)
+            return await commands.closePoll(ctx, message)
         }
         if (isCommand(message, commands.POLL_RESULTS_COMMAND)) {
-            return await commands.pollResults(message)
+            return await commands.pollResults(ctx, message)
         }
         if (isCommand(message, commands.AUDIT_POLL_COMMAND)) {
-            return await commands.auditPoll(message)
+            return await commands.auditPoll(ctx, message)
         }
-        return await commands.help(message)
-    } catch {
-        console.log('There was an error on message')
+        return await commands.help(ctx, message)
+    } catch(e) {
+        console.error(e)
         return await message.channel.send('There was an unknown error with your command. Sorry about that.')
     }
 })
 
 client.on('messageReactionAdd', async (reaction, user) => {
+    const ctx = context.withMessageReaction(reaction, user)
     try {
         if (!client.user?.id) {
             return
@@ -85,7 +89,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
             return
         }
         if (reaction.message.content.startsWith(commands.POLL_ID_PREFIX)) {
-            await commands.createBallot(reaction, user)
+            await commands.createBallot(ctx, reaction, user)
         }
     } catch {
         console.log('There was an error on reaction')

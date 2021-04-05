@@ -20,6 +20,8 @@
         "build": "tsc",
         "watch": "tsc -w",
         "dev": "ts-node-dev src/index.ts --watch",
+        "devProd": "NODE_ENV=production ts-node-dev src/index.ts --watch",
+        "devStaging": "NODE_ENV=staging ts-node-dev src/index.ts --watch",
         "test": "jest"
     },
     "dependencies": {

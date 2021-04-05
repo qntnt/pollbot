@@ -1,14 +1,12 @@
-import { Guild, GuildMember, Message, MessageAttachment, MessageReaction, PartialUser, User } from 'discord.js'
+import { Client, ClientApplication, GuildMember, Message, MessageAttachment, MessageReaction, PartialUser, Team, TeamMember, User } from 'discord.js'
 import moment from 'moment-timezone'
 import { Option, OptionKey, Poll, PollConfig, PollId, Vote } from './models'
 import storage from './storage'
 import { computeResults, resultsSummary } from './voting'
 import { showMatrix } from './voting/condorcet'
-import { stringify } from 'csv'
-import { WriteStream } from 'fs'
-import { Writable } from 'stream'
+import { PREFIX } from './settings'
 
-export const POLLBOT_PREFIX = "!pollbot"
+export const POLLBOT_PREFIX = PREFIX
 export const CREATE_POLL_COMMAND = `${POLLBOT_PREFIX} poll`
 export const CLOSE_POLL_COMMAND = `${POLLBOT_PREFIX} close`
 export const POLL_RESULTS_COMMAND = `${POLLBOT_PREFIX} results`
@@ -16,7 +14,152 @@ export const AUDIT_POLL_COMMAND = `${POLLBOT_PREFIX} audit`
 
 export const POLL_ID_PREFIX = '> poll#'
 
-export async function createPoll(message: Message) {
+
+function isTeam(userTeam: User | Team | null | undefined): userTeam is Team {
+        return userTeam !== undefined && (userTeam as Team).ownerID !== null
+}
+
+function isMessage(interaction: Interaction | undefined): interaction is Message {
+    return interaction !== undefined && (interaction as Message).content !== undefined
+}
+
+type Interaction = Message | MessageReaction
+type AnyUser = User | GuildMember | TeamMember | PartialUser
+type BotOwner = User | Team
+export class Context {
+    private _client: Client
+    private _application?: ClientApplication
+    private _botOwner?: BotOwner
+    private _interaction?: Interaction
+    private _user?: AnyUser
+    private _isInitialized: boolean
+
+    constructor(
+        client: Client,
+        application?: ClientApplication,
+        botOwner?: BotOwner,
+        interaction?: Interaction,
+        user?: AnyUser,
+        isInitialized: boolean = false
+    ) {
+        this._client = client
+        this._application = application
+        this._botOwner = botOwner
+        this._interaction = interaction
+        this._user = user
+        this._isInitialized = false
+        if (isInitialized) this.init()
+    }
+
+    async init() {
+        this._application = await this.fetchApplication()
+        this._botOwner = await this.fetchOwner()
+        this._isInitialized = true
+    }
+
+    withMessage(message: Message): Context {
+        const user = message.channel.type === 'dm' ? message.author : message.member ?? message.author
+        return new Context(
+            this._client,
+            this._application,
+            this._botOwner,
+            message,
+            user,
+            this._isInitialized,
+        )
+    }
+
+    withMessageReaction(reaction: MessageReaction, user: AnyUser): Context {
+        return new Context(
+            this._client,
+            this._application,
+            this._botOwner,
+            reaction,
+            user,
+            this._isInitialized,
+        )
+    }
+
+    clone(
+        interaction?: Interaction,
+        user?: AnyUser,
+        isInitialized: boolean = false
+    ): Context {
+        return new Context(
+            this._client,
+            this._application,
+            this._botOwner,
+            interaction,
+            user,
+            isInitialized,
+        )
+    }
+
+    async client(): Promise<Client> {
+        return this._client
+    }
+
+    async application(): Promise<ClientApplication> {
+        return await this.fetchApplication()
+    }
+
+    get user(): AnyUser {
+        if (this._user === undefined) throw 'Context user not defined'
+        return this._user
+    }
+
+    async isBotOwner(user?: AnyUser | null): Promise<boolean>  {
+        if (!user) return false
+        const owner = await this.fetchOwner()
+        if (owner) {
+            if (isTeam(owner)) {
+                return owner.members.has(user.id)
+            } else {
+                return owner.id === user.id
+            }
+        } else {
+            return false
+        }
+    }
+    
+    async checkPermissions(permissions: PollbotPermission[], poll?: Poll) {
+        const hasPerm = (p: PollbotPermission) => permissions.indexOf(p) !== -1
+        
+        if (hasPerm('pollOwner') && poll?.ownerId === this.user.id) {
+            return true
+        }
+        if (hasPerm('guildAdmin') && isGuildMember(this.user) && poll) {
+            return this.user.hasPermission('ADMINISTRATOR') === true && this.user.guild.id === poll.guildId
+        }
+        if (hasPerm('botOwner') && this.isBotOwner(this.user)) {
+            return true
+        }
+        if (hasPerm('pollGuild')) {
+            isMessage(this._interaction)
+            return poll?.guildId
+        }
+        throw `Missing permissions ${permissions}`
+    }
+
+    private async fetchApplication(): Promise<ClientApplication> {
+        if (this._application === undefined) {
+            const client = await this.client()
+            this._application = await client.fetchApplication()
+        }
+        return this._application
+    }
+
+    private async fetchOwner(): Promise<BotOwner | undefined> {
+        if (this._botOwner) {
+            return this._botOwner
+        }
+        const app = await this.application()
+        this._botOwner = app.owner ?? undefined
+        return this._botOwner
+    }
+}
+
+export async function createPoll(ctx: Context, message: Message) {
     const command = message.content.substring(
         CREATE_POLL_COMMAND.length,
         message.content.length
@@ -75,7 +218,7 @@ async function createPollHelp(message: Message) {
     )
 }
 
-export async function closePoll(message: Message) {
+export async function closePoll(ctx: Context,  message: Message) {
     const pollId = message.content.substring(
         CLOSE_POLL_COMMAND.length,
         message.content.length
@@ -87,11 +230,10 @@ export async function closePoll(message: Message) {
     if (!poll) {
         return await message.channel.send(`I couldn't find poll ${pollId}`)
     }
-    const admin = isAdmin(poll, message.member ?? undefined)
-    if (poll.guildId !== message.guild?.id) {
-        return await message.channel.send(`Poll ${poll.id} does not belong to this server`)
-    }
-    if (message.author.id !== poll.ownerId && !admin) {
+
+    try {
+        await ctx.checkPermissions(['botOwner', 'guildAdmin', 'pollOwner'], poll)
+    } catch {
         return await message.channel.send(`You don't have permission to close this poll`)
     }
     const newPoll = storage.updatePoll(poll.id, {
@@ -120,7 +262,7 @@ async function closePollHelp(message: Message) {
     return await message.channel.send(`Close polls with this command format:\n\`${CLOSE_POLL_COMMAND} <pollId>\``)
 }
 
-export async function pollResults(message: Message) {
+export async function pollResults(ctx: Context, message: Message) {
     const pollId = message.content.substring(
         POLL_RESULTS_COMMAND.length,
         message.content.length
@@ -134,7 +276,14 @@ export async function pollResults(message: Message) {
     if (!poll) {
         return await message.channel.send(`Poll ${pollId} not found.`)
     }
-    if (poll?.guildId !== message.guild?.id) {
+    try {
+        ctx.checkPermissions([
+            'botOwner', 
+            'pollOwner', 
+            'pollGuild', 
+            'guildAdmin',
+        ], poll)
+    } catch {
         return await message.channel.send(`You can't view results for poll ${pollId} in this channel.`)
     }
     const ballots = await storage.listBallots(poll.id)
@@ -159,7 +308,7 @@ function extractPollId(text: string | undefined): PollId | undefined {
     return m[1]
 }
 
-export async function createBallot(reaction: MessageReaction, user: User | PartialUser) {
+export async function createBallot(ctx: Context, reaction: MessageReaction, user: User | PartialUser) {
     const pollId = extractPollId(reaction.message.content)
     if (!pollId) {
         return await user.send('There was an issue creating your ballot. Couldn\'t parse pollId')
@@ -190,7 +339,7 @@ export async function createBallot(reaction: MessageReaction, user: User | Parti
     user.send(response)
 }
 
-export async function submitBallot(message: Message) {
+export async function submitBallot(ctx: Context,  message: Message) {
     const limit = 50
     const history = await message.channel.messages.fetch({ limit })
     const lastBallotText = history.find(m => m.content.startsWith(POLL_ID_PREFIX))
@@ -253,7 +402,7 @@ export async function submitBallot(message: Message) {
     )
 }
 
-export async function help(message: Message) {
+export async function help(ctx: Context,  message: Message) {
     message.channel.send('Commands: `poll`, `close`, `results`, `audit`')
 }
 
@@ -270,11 +419,19 @@ function toCSV(columns: string[], records: Record<string, string | number | unde
     return [header, toCSVRows(columns, records)].join('\n')
 }
 
-async function isAdmin(poll: Poll, member?: GuildMember): Promise<boolean> {
-    return member?.hasPermission('ADMINISTRATOR') === true && member.guild.id === poll.guildId
+type PollbotPermission = 'pollOwner'
+    | 'botOwner'
+    | 'guildAdmin'
+    | 'pollGuild'
+
+function isGuildMember(user?: AnyUser | null): user is GuildMember {
+    if (user) {
+        return (user as GuildMember).guild !== undefined
+    }
+    return false
 }
 
-export async function auditPoll(message: Message) {
+export async function auditPoll(ctx: Context, message: Message) {
     const pollId = message.content.substring(
         AUDIT_POLL_COMMAND.length,
         message.content.length
@@ -291,8 +448,10 @@ export async function auditPoll(message: Message) {
     if (poll.guildId !== message.guild?.id) {
         return message.channel.send(`Poll ${pollId} does not belong to this server.`)
     }
-    const admin = await isAdmin(poll, message.member ?? undefined)
-    if (!admin) {
+
+    try {
+        await ctx.checkPermissions(['botOwner', 'guildAdmin'], poll)
+    } catch {
         return message.channel.send(`You are not an admin for this bot instance. Only admins may audit poll results and export ballot data.`)
     }
 
