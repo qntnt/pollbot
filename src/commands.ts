@@ -349,13 +349,16 @@ export async function createBallot(ctx: Context, reaction: MessageReaction, user
 export async function submitBallot(ctx: Context,  message: Message) {
     const limit = 50
     const history = await message.channel.messages.fetch({ limit })
-    const lastBallotText = history.find(m => m.content.startsWith(POLL_ID_PREFIX))
+    const lastBallotText = history.find(m => findPollId(m) !== undefined)
+    if (!lastBallotText) {
+        return await message.channel.send(`Could not find a pollId in the last ${limit} messages`)
+    }
 
     if (message.content.toLowerCase().startsWith(POLLBOT_PREFIX)) {
         return await message.channel.send('DMs are for submitting ballots. Manage polls in public channels.')
     }
 
-    const pollId = extractPollId(lastBallotText?.content)
+    const pollId = findPollId(lastBallotText)
     if (!pollId) {
         return await message.channel.send(`Could not find a pollId in the last ${limit} messages`)
     }
@@ -406,6 +409,8 @@ export async function submitBallot(ctx: Context,  message: Message) {
         '====================\n' +
         summaryLines.join('\n') +
         `\`\`\``)
+        .setFooter(`${POLL_ID_PREFIX}${poll.id}\nballot#${ballot.id}`)
+        .setTimestamp()
 
     return message.channel.send(responseEmbed)
 }
