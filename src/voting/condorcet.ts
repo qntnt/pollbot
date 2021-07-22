@@ -1,4 +1,5 @@
 import columnify from "columnify";
+import { L } from "../settings";
 import { Timer } from "../util/timer";
 import { Ranking, Vote, OptionMatrix, RankingResults, RankingMetrics } from "./interfaces";
 
@@ -162,7 +163,6 @@ function dfs(g: Graph, start: Node, pred: ((node: Node, depth: number) => boolea
 }
 
 function dfsVisited(g: Graph, start: Node, visited: Node[], depth: number, pred: ((node: Node, depth: number) => boolean)): Node | undefined {
-    console.log(start, visited)
     if (pred(start, depth)) {
         return start
     }
@@ -182,15 +182,13 @@ function dfsVisited(g: Graph, start: Node, visited: Node[], depth: number, pred:
     }
 }
 
-
-
 function addAcyclicEdge(g: Graph, edge: Edge) {
     addEdge(g, edge)
     const hasCycle = dfs(g, edge.start, (n, depth) => {
         return n === edge.start && depth !== 0
     })
     if (hasCycle) {
-        console.log('New edge would create cycle', edge, g)
+        L.d('New edge would create cycle', edge, g)
         deleteEdge(g, edge)
     }
 }

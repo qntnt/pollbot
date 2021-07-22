@@ -9,3 +9,11 @@ type Environment = keyof typeof ENV_PREFIXES
 export const ENV: Environment = ENV_PREFIXES[(process.env['NODE_ENV'] ?? 'unknown') as Environment] ? (process.env['NODE_ENV'] ?? 'unknown') as Environment : 'unknown'
 export const PREFIX = ENV_PREFIXES[ENV] 
 export const DEBUG = ENV !== 'production'
+
+export class L {
+  public static d(...args: any): void {
+    if (DEBUG) {
+        console.log(args)
+    }
+  }
+}

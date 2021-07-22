@@ -112,8 +112,8 @@ export class Context {
         if (!user) return false
         const owner = await this.fetchOwner()
         if (owner) {
-            if (isTeam(owner)) {
-                return owner.members.has(user.id)
+            if (isTeam(owner) && owner.members?.has(user.id) === true) {
+                return true
             } else {
                 return owner.id === user.id
             }
@@ -468,14 +468,17 @@ export async function auditPoll(ctx: Context, message: Message) {
     }
     const summary = resultsSummary(poll, results)
     const matrixSummary = showMatrix(results.matrix)
-    await message.channel.send(
-        summary +
-        'Pairwise Comparison Matrix\n' +
-        '> To read this, each value in a row shows who wins a matchup between candidates\n' +
-        '\n```' +
-        matrixSummary +
-        '```'
-    )
+    await message.channel.send(summary)
+    const matrixMsg = 'Pairwise Comparison Matrix\n' +
+    '> To read this, each value in a row shows who wins a matchup between candidates\n' +
+    '\n```' +
+    matrixSummary +
+    '```'
+    if (matrixMsg.length <= 2000) {
+        await message.channel.send(matrixMsg)
+    } else {
+        await message.channel.send('Your poll has too many options to render a pairwise comparison matrix.')
+    }
 
     const options = Object.values(poll.options).sort()
     const columns = ['ballotId', 'createdAt', 'updatedAt', 'userId', 'userName', ...options]
