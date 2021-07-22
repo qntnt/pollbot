@@ -1,4 +1,6 @@
 import columnify from "columnify";
+import { MessageEmbed } from "discord.js";
+import { POLL_ID_PREFIX } from "../commands";
 import { Ballot, Poll } from "../models";
 import { rankedPairs, showMatrix } from "./condorcet";
 import { RankingResults, RankingType, Vote } from "./interfaces";
@@ -22,8 +24,8 @@ function displayRankingType(rankingType: RankingType): string {
     }
 }
 
-export function resultsSummary(poll: Poll, results: RankingResults): string {
-    const footer = `> Ranking Type: ${displayRankingType(results.rankingType)}\n`
+export function resultsSummary(poll: Poll, results: RankingResults): MessageEmbed {
+    const footer = `Ranking Type: ${displayRankingType(results.rankingType)}\n`
     const table = columnify(
         results.rankings.map(({ key, rank, score }) => ({
             key,
@@ -36,16 +38,17 @@ export function resultsSummary(poll: Poll, results: RankingResults): string {
         columnSplitter: ' | '
     })
     const metrics = (
-        `> Ballot count: ${results.metrics.voteCount}\n` +
-        `> Time to compute: ${results.metrics.computeDuration.toFormat('S')}ms\n`
+        `Ballot count: ${results.metrics.voteCount}\n` +
+        `Time to compute: ${results.metrics.computeDuration.toFormat('S')}ms\n`
     )
-    return (
-        '```\n' +
-        table +
-        '```\n' +
-        metrics +
-        footer
-    )
+    const embed = new MessageEmbed()
+        .addField(poll.topic, '```\n'+
+            table +
+            '\n```')
+        .addField('Metrics', metrics)
+        .addField('Info', footer)
+        .setFooter(`${POLL_ID_PREFIX}${poll.id}`)
+    return embed
 }
 
 export function explainResults(poll: Poll, results: RankingResults): string {

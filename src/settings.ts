@@ -13,7 +13,7 @@ export const DEBUG = ENV !== 'production'
 export class L {
   public static d(...args: any): void {
     if (DEBUG) {
-        console.log(args)
+        console.log(...args)
     }
   }
 }

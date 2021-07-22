@@ -1,10 +1,10 @@
-import { Client, ClientApplication, GuildMember, Message, MessageAttachment, MessageReaction, PartialUser, Team, TeamMember, User } from 'discord.js'
+import { Client, ClientApplication, GuildMember, Message, MessageAttachment, MessageEmbed, MessageReaction, PartialUser, Team, TeamMember, User } from 'discord.js'
 import moment from 'moment-timezone'
 import { Option, OptionKey, Poll, PollConfig, PollId, Vote } from './models'
 import storage from './storage'
 import { computeResults, resultsSummary } from './voting'
 import { showMatrix } from './voting/condorcet'
-import { PREFIX } from './settings'
+import { L, PREFIX } from './settings'
 
 export const POLLBOT_PREFIX = PREFIX
 export const CREATE_POLL_COMMAND = `${POLLBOT_PREFIX} poll`
@@ -12,7 +12,7 @@ export const CLOSE_POLL_COMMAND = `${POLLBOT_PREFIX} close`
 export const POLL_RESULTS_COMMAND = `${POLLBOT_PREFIX} results`
 export const AUDIT_POLL_COMMAND = `${POLLBOT_PREFIX} audit`
 
-export const POLL_ID_PREFIX = '> poll#'
+export const POLL_ID_PREFIX = 'poll#'
 
 
 function isTeam(userTeam: User | Team | null | undefined): userTeam is Team {
@@ -199,13 +199,15 @@ export async function createPoll(ctx: Context, message: Message) {
     }
     const closesAt = moment(poll.closesAt).tz('America/Los_Angeles').format('dddd, MMMM Do YYYY, h:mm zz')
     const optionText = Object.values(poll?.options).map(o => `\`${o}\``).join(', ')
-    const pollMessage = await message.channel.send(
-        `${POLL_ID_PREFIX}${poll.id}\n` +
-        `> This poll closes at **${closesAt}**\n` +
-        `> React to this message for me to DM you a ballot\n\n` +
-        `**${poll.topic}**\n` +
-        `${optionText}`
+    const pollMsgEmbed = new MessageEmbed({
+        title: `${POLL_ID_PREFIX}${poll.id}`,
+    })
+    .addField(poll.topic, optionText)
+    .setFooter(
+        `This poll closes at **${closesAt}**\n` +
+        `React to this message for me to DM you a ballot`
     )
+    const pollMessage = await message.channel.send(pollMsgEmbed)
     await pollMessage.react('👋')
 }
 
@@ -239,8 +241,9 @@ export async function closePoll(ctx: Context,  message: Message) {
     const newPoll = storage.updatePoll(poll.id, {
         closesAt: moment().toDate()
     })
-    await message.channel.send(`Poll ${poll.id} is now closed.`)
-    const resultMessage = await message.channel.send('Computing results...')
+    const resultMessage = await message.channel.send(new MessageEmbed({
+        description: 'Computing results...'
+    }))
     try {
         const ballots = await storage.listBallots(poll.id)
         const results = computeResults(poll, ballots)
@@ -248,11 +251,8 @@ export async function closePoll(ctx: Context,  message: Message) {
             return await message.channel.send('There was an issue tabulating results')
         }
         const summary = resultsSummary(poll, results)
-        return await resultMessage.edit(
-            `Here are the results for poll ${poll.id}:\n` +
-            `**${poll.topic}**\n` +
-            summary
-        )
+        summary.setTitle(`${POLL_ID_PREFIX}${poll.id} is now closed.`)
+        return await resultMessage.edit(summary)
     } catch {
         return await resultMessage.edit(`There was an issue computing results for poll ${poll.id}`)
     }
@@ -300,7 +300,7 @@ async function pollResultsHelp(message: Message) {
     return await message.channel.send(`View poll results with this command format:\n\`${POLL_RESULTS_COMMAND} <pollId>\``)
 }
 
-const POLL_EXPR = new RegExp(`^${POLL_ID_PREFIX}(.+)\n`)
+const POLL_EXPR = new RegExp(`^>?\s?${POLL_ID_PREFIX}(.+)`)
 
 function extractPollId(text: string | undefined): PollId | undefined {
     const m = text?.match(POLL_EXPR)
@@ -308,9 +308,17 @@ function extractPollId(text: string | undefined): PollId | undefined {
     return m[1]
 }
 
+function findPollId(message: Message): string | undefined {
+    let pollId = extractPollId(message.content)
+    if (pollId) return pollId
+    pollId = extractPollId(message.embeds[0]?.title ?? undefined)
+    return pollId
+}
+
 export async function createBallot(ctx: Context, reaction: MessageReaction, user: User | PartialUser) {
-    const pollId = extractPollId(reaction.message.content)
+    const pollId = findPollId(reaction.message)
     if (!pollId) {
+        L.d(`Couldn't find poll for new ballot: ${reaction.message.content.substring(0, POLL_ID_PREFIX.length)}`)
         return await user.send('There was an issue creating your ballot. Couldn\'t parse pollId')
     }
     const poll = await storage.getPoll(pollId)
@@ -326,17 +334,16 @@ export async function createBallot(ctx: Context, reaction: MessageReaction, user
     }
 
     const optionText = Object.keys(poll.options).sort().map(key => `${key}| ${poll.options[key]}`).join('\n')
-
-    const response = `${POLL_ID_PREFIX}${poll.id}\n` +
-        `> Here's your ballot\n` +
-        `> To vote, order the options from best to worst in a comma-separated list e.g. \`C,b,a,d\`\n` +
-        `> _Invalid options will be ignored_\n` +
-        `> _**Privacy notice**: Your user id and current user name is linked to your ballot. Your ballot is viewable by you and bot admins._\n\n` +
-        `**${poll.topic}**\n` +
-        '```\n' +
-        `${optionText}` +
-        '```'
-    user.send(response)
+    const responseEmbed = new MessageEmbed({
+        title: `${POLL_ID_PREFIX}${poll.id}`,
+        description: `Here's your ballot.`,
+    })
+        .addField('Instructions', 
+            `To vote, order the options from best to worst in a comma-separated list e.g. \`C,b,a,d\`\n` +
+            `_Invalid options will be ignored_\n`)
+        .addField(poll.topic, `\`\`\`\n${optionText}\n\`\`\``)
+        .setFooter(`Privacy notice: Your user id and current user name is linked to your ballot. Your ballot is viewable by you and bot admins.\n\nballot#${ballot.id}`)
+    user.send(responseEmbed)
 }
 
 export async function submitBallot(ctx: Context,  message: Message) {
@@ -391,15 +398,16 @@ export async function submitBallot(ctx: Context,  message: Message) {
     const summaryLines = validOptionKeys.map(key => ` ${votes[key] ? votes[key].rank : '_'}    | ${key}   | ${poll.options[key]}`)
     summaryLines.sort()
 
-    return message.channel.send(
-        'I\'ve recorded your ballot.\n' +
-        'Here\'s a summary of your votes:\n' +
-        '```\n' +
+    const responseEmbed = new MessageEmbed({
+        description: `I've recorded your ballot.`
+    })
+    .addField('Vote summary', `\`\`\``+
         ' rank | key | option\n' +
         '====================\n' +
         summaryLines.join('\n') +
-        '```'
-    )
+        `\`\`\``)
+
+    return message.channel.send(responseEmbed)
 }
 
 export async function help(ctx: Context,  message: Message) {
@@ -469,13 +477,14 @@ export async function auditPoll(ctx: Context, message: Message) {
     const summary = resultsSummary(poll, results)
     const matrixSummary = showMatrix(results.matrix)
     await message.channel.send(summary)
-    const matrixMsg = 'Pairwise Comparison Matrix\n' +
-    '> To read this, each value in a row shows who wins a matchup between candidates\n' +
-    '\n```' +
-    matrixSummary +
-    '```'
-    if (matrixMsg.length <= 2000) {
-        await message.channel.send(matrixMsg)
+    const matrixEmbed = new MessageEmbed()
+        .addField('Pairwise Comparison Matrix', 
+        'To read this, each value in a row shows who wins a matchup between candidates\n' +
+        '```' +
+        matrixSummary +
+        '```')
+    if (matrixEmbed.length <= 2000) {
+        await message.channel.send(matrixEmbed)
     } else {
         await message.channel.send('Your poll has too many options to render a pairwise comparison matrix.')
     }
@@ -499,6 +508,9 @@ export async function auditPoll(ctx: Context, message: Message) {
     const csvBuffer = Buffer.from(csvText)
     const attachment = new MessageAttachment(csvBuffer, `poll_${poll.id}_votes.csv`)
     await message.author.send(attachment)
+    await message.channel.send(new MessageEmbed({
+        description: `I sent you a direct message with a \`.csv\` file that contains all ballot data for \`${POLL_ID_PREFIX}${poll.id}\`.`
+    }))
 }
 
 async function auditPollHelp(message: Message) {

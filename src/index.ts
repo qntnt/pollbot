@@ -1,5 +1,5 @@
 import * as Discord from 'discord.js'
-import { DISCORD_TOKEN } from './settings'
+import { DISCORD_TOKEN, L } from './settings'
 import * as commands from './commands'
 import storage from './storage'
 
@@ -73,6 +73,29 @@ client.on('message', async message => {
     }
 })
 
+client.on('raw', async packet => {
+    if (!['MESSAGE_REACTION_ADD'].includes(packet.t)) return
+    // Grab the channel to check the message from
+    const channel = (await client.channels.fetch(packet.d.channel_id)) as Discord.TextChannel
+    // There's no need to emit if the message is cached, because the event will fire anyway for that
+    if (channel.messages.cache.has(packet.d.message_id)) return
+    // Since we have confirmed the message is not cached, let's fetch it
+    const message = await channel.messages.fetch(packet.d.message_id)
+    // Emojis can have identifiers of name:id format, so we have to account for that case as well
+    const emoji = packet.d.emoji.id ? `${packet.d.emoji.name}:${packet.d.emoji.id}` : packet.d.emoji.name
+    // This gives us the reaction we need to emit the event properly, in top of the message object
+    const reaction = message.reactions.resolve(emoji)
+    if (!reaction) return
+    const user = await client.users.fetch(packet.d.user_id)
+    // Adds the currently reacting user to the reaction's users collection.
+    reaction.users.cache.set(packet.d.user_id, user)
+    reaction.message = message
+    // Check which type of event it is before emitting
+    if (packet.t === 'MESSAGE_REACTION_ADD') {
+        client.emit('messageReactionAdd', reaction, user)
+    }
+})
+
 client.on('messageReactionAdd', async (reaction, user) => {
     const ctx = context.withMessageReaction(reaction, user)
     try {
@@ -88,11 +111,12 @@ client.on('messageReactionAdd', async (reaction, user) => {
         if (!user) {
             return
         }
-        if (reaction.message.content.startsWith(commands.POLL_ID_PREFIX)) {
-            await commands.createBallot(ctx, reaction, user)
+        if (reaction.message.embeds[0]?.title?.startsWith(commands.POLL_ID_PREFIX) === true) {
+            return await commands.createBallot(ctx, reaction, user)
         }
+        L.d(`Couldn't find poll from reaction: ${reaction.emoji} on message ${reaction.message.id}...`)
     } catch {
-        console.log('There was an error on reaction')
+        L.d('There was an error on reaction')
     }
 })
 
