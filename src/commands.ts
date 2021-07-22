@@ -431,6 +431,11 @@ function isGuildMember(user?: AnyUser | null): user is GuildMember {
     return false
 }
 
+function belongsToGuild(ctx: Context, poll: Poll, message: Message, bypassForBotOwner: boolean = true) {
+    if (bypassForBotOwner && ctx.checkPermissions(['botOwner'])) return true
+    return poll.guildId === message.guild?.id
+}
+
 export async function auditPoll(ctx: Context, message: Message) {
     const pollId = message.content.substring(
         AUDIT_POLL_COMMAND.length,
@@ -445,7 +450,7 @@ export async function auditPoll(ctx: Context, message: Message) {
     if (!poll) {
         return message.channel.send(`Poll ${pollId} not found.`)
     }
-    if (poll.guildId !== message.guild?.id) {
+    if (!belongsToGuild(ctx, poll, message)) {
         return message.channel.send(`Poll ${pollId} does not belong to this server.`)
     }
 
