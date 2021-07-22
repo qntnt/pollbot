@@ -336,6 +336,7 @@ export async function createBallot(ctx: Context, reaction: MessageReaction, user
         title: `${POLL_ID_PREFIX}${poll.id}`,
         description: `Here's your ballot.`,
     })
+        .setURL(reaction.message.url)
         .addField('Instructions', 
             `To vote, order the options from best to worst in a comma-separated list e.g. \`C,b,a,d\`\n` +
             `_Invalid options will be ignored_\n`)
