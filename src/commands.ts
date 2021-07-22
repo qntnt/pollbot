@@ -201,12 +201,10 @@ export async function createPoll(ctx: Context, message: Message) {
     const optionText = Object.values(poll?.options).map(o => `\`${o}\``).join(', ')
     const pollMsgEmbed = new MessageEmbed({
         title: `${POLL_ID_PREFIX}${poll.id}`,
+        description: `React to this message for me to DM you a ballot`,
     })
     .addField(poll.topic, optionText)
-    .setFooter(
-        `This poll closes at **${closesAt}**\n` +
-        `React to this message for me to DM you a ballot`
-    )
+    .setFooter(`This poll closes at ${closesAt}`)
     const pollMessage = await message.channel.send(pollMsgEmbed)
     await pollMessage.react('👋')
 }
