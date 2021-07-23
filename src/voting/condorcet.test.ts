@@ -59,13 +59,13 @@ test('buildMatrix', () => {
     expect(unsafe(matrix['d']['a']) / ballotCount).toBeCloseTo(0.57, 1) // Knoxville beats Memphis 57%
 
     // Make sure rankings are ordered
-    expect(r?.rankings[0].rank).toEqual(1)
-    expect(r?.rankings[1].rank).toEqual(2)
-    expect(r?.rankings[2].rank).toEqual(3)
-    expect(r?.rankings[3].rank).toEqual(4)
+    expect(r?.finalRankings[0][1]).toEqual(1)
+    expect(r?.finalRankings[1][1]).toEqual(2)
+    expect(r?.finalRankings[2][1]).toEqual(3)
+    expect(r?.finalRankings[3][1]).toEqual(4)
 
-    expect(r?.rankings[0].key).toEqual('b') // 1st: Nashville
-    expect(r?.rankings[1].key).toEqual('c') // 2nd: Chattanooga
-    expect(r?.rankings[2].key).toEqual('d') // 3rd: Knoxville
-    expect(r?.rankings[3].key).toEqual('a') // 4th: Memphis
+    expect(r?.finalRankings[0][0]).toEqual('b') // 1st: Nashville
+    expect(r?.finalRankings[1][0]).toEqual('c') // 2nd: Chattanooga
+    expect(r?.finalRankings[2][0]).toEqual('d') // 3rd: Knoxville
+    expect(r?.finalRankings[3][0]).toEqual('a') // 4th: Memphis
 })
