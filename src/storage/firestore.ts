@@ -1,6 +1,8 @@
 import * as admin from 'firebase-admin'
 import moment from 'moment'
-import { Ballot, BallotConfig, GuildData, OptionKey, Poll, PollConfig, UserId, Vote } from '../models'
+import { Ballot, BallotConfig, GuildData, PollOptionKey, Poll, PollConfig, UserId, Vote } from '../models'
+import { zipToRecord } from '../util/array'
+import { shuffled } from '../util/random'
 import { Storage } from './interface'
 
 admin.initializeApp()
@@ -84,12 +86,14 @@ export class FirestoreStorage implements Storage {
 
     async createBallot({ poll, userId, userName }: BallotConfig): Promise<Ballot | undefined> {
         const now = moment()
-        const votes = Object.keys(poll.options).reduce((acc, key) => {
+        const pollOptionKeys = Object.keys(poll.options)
+        const votes = pollOptionKeys.reduce((acc, key) => {
             acc[key] = {
                 option: poll.options[key],
             }
             return acc
-        }, {} as Record<OptionKey, Vote>)
+        }, {} as Record<PollOptionKey, Vote>)
+        const randomizedBallotMapping = zipToRecord(shuffled(pollOptionKeys), pollOptionKeys)
         const ballot: Ballot = {
             pollId: poll.id,
             id: poll.id + userId,
@@ -98,6 +102,7 @@ export class FirestoreStorage implements Storage {
             createdAt: now.toDate(),
             updatedAt: now.toDate(),
             votes,
+            ballotOptionMapping: randomizedBallotMapping
         }
         await this.ballotCollection.doc(ballot.id).set(ballot)
         return ballot
@@ -132,3 +137,4 @@ export class FirestoreStorage implements Storage {
         return snapshot.docs.map(doc => doc.data()) as Ballot[]
     }
 }
+

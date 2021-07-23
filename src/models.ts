@@ -1,7 +1,8 @@
 export type UserId = string
 export type GuildId = string
 export type PollId = string
-export type OptionKey = string
+export type BallotOptionKey = string
+export type PollOptionKey = string
 export type Option = string
 export type BallotId = string
 
@@ -29,7 +30,8 @@ export interface Ballot {
     userName: string
     createdAt: Date
     updatedAt: Date
-    votes: Record<OptionKey, Vote>
+    votes: Record<PollOptionKey, Vote>
+    ballotOptionMapping?: Partial<Record<BallotOptionKey, PollOptionKey>>
 }
 
 // Used to create new polls
@@ -37,7 +39,7 @@ export interface PollConfig {
     guildId: GuildId,
     ownerId: UserId,
     topic: string,
-    options: Record<OptionKey, Option>,
+    options: Record<PollOptionKey, Option>,
 }
 
 export interface Poll {
@@ -47,6 +49,6 @@ export interface Poll {
     createdAt: Date
     closesAt: Date
     topic: string
-    options: Record<OptionKey, Option>
+    options: Record<PollOptionKey, Option>
     ballots: Record<UserId, Ballot>
 }

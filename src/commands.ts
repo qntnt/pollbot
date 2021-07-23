@@ -1,6 +1,6 @@
 import { Client, ClientApplication, GuildMember, Message, MessageAttachment, MessageEmbed, MessageReaction, PartialUser, Team, TeamMember, User } from 'discord.js'
 import moment from 'moment-timezone'
-import { Option, OptionKey, Poll, PollConfig, PollId, Vote } from './models'
+import { Option, PollOptionKey, Poll, PollConfig, PollId, Vote, BallotOptionKey } from './models'
 import storage from './storage'
 import { computeResults, resultsSummary } from './voting'
 import { showMatrix } from './voting/condorcet'
@@ -179,7 +179,7 @@ export async function createPoll(ctx: Context, message: Message) {
     if (optionsList.length < 2) {
         return message.channel.send('You must specify at least two options in a poll.')
     }
-    const options: Record<OptionKey, Option> = {}
+    const options: Record<PollOptionKey, Option> = {}
     optionsList.forEach((o, i) => {
         const key = String.fromCharCode(97 + i)
         options[key] = o
@@ -321,17 +321,31 @@ export async function createBallot(ctx: Context, reaction: MessageReaction, user
     }
     const poll = await storage.getPoll(pollId)
     if (!poll) return await user.send('There was an issue creating your ballot. Couldn\'t find the poll')
-    const ballot = await storage.createBallot({
-        poll,
-        userId: user.id,
-        userName: user.username ?? '',
-    })
+    
+    let ballot = await storage.findBallot(poll.id, user.id)
+    if (!ballot) {
+        ballot = await storage.createBallot({
+            poll,
+            userId: user.id,
+            userName: user.username ?? '',
+        })
+    }
 
     if (!ballot) {
         return await user.send('There was an issue creating your ballot.')
     }
 
-    const optionText = Object.keys(poll.options).sort().map(key => `${key}| ${poll.options[key]}`).join('\n')
+    let optionText = ''
+    const ballotOptionMapping = ballot.ballotOptionMapping
+    if (ballotOptionMapping) {
+        optionText = Object.keys(ballotOptionMapping).sort().map(ballotKey => {
+            const pollOptionKey = ballotOptionMapping[ballotKey] ?? ''
+            const pollOption = poll.options[pollOptionKey]
+            return `${ballotKey}| ${pollOption}`
+        }).join('\n')
+    } else {
+        optionText = Object.keys(poll.options).sort().map(key => `${key}| ${poll.options[key]}`).join('\n')
+    }
     const responseEmbed = new MessageEmbed({
         title: `${POLL_ID_PREFIX}${poll.id}`,
         description: `Here's your ballot.`,
@@ -380,15 +394,30 @@ export async function submitBallot(ctx: Context,  message: Message) {
     const voteKeys = message.content.trim().split(',')
         .map(key => key.trim())
     const validVoteKeys = voteKeys.filter(key => validOptionKeys.find((ok) => ok === key))
-    const votes = validVoteKeys
-        .reduce((acc, key, i) => {
-            acc[key] = {
-                option: poll.options[key],
-                rank: i + 1
-            }
-            return acc
-        }, {} as Record<OptionKey, Vote>)
-
+    let votes: Record<PollOptionKey, Vote> = {}
+    const ballotOptionMapping = ballot.ballotOptionMapping
+    if (ballotOptionMapping) {
+        votes = validVoteKeys
+            .reduce((acc, ballotKey, i) => {
+                const pollOptionKey = ballotOptionMapping[ballotKey]
+                if (pollOptionKey) {
+                    acc[pollOptionKey] = {
+                        option: poll.options[pollOptionKey],
+                        rank: i + 1
+                    }
+                }
+                return acc
+            }, {} as Record<PollOptionKey, Vote>)
+    } else {
+        votes = validVoteKeys
+            .reduce((acc, pollOptionKey, i) => {
+                acc[pollOptionKey] = {
+                    option: poll.options[pollOptionKey],
+                    rank: i + 1
+                }
+                return acc
+            }, {} as Record<PollOptionKey, Vote>)
+    }
     const updatedBallot = await storage.updateBallot(ballot.id, {
         updatedAt: moment().toDate(),
         votes,
