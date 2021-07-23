@@ -1,6 +1,6 @@
 import * as admin from 'firebase-admin'
 import moment from 'moment'
-import { Ballot, BallotConfig, GuildData, PollOptionKey, Poll, PollConfig, UserId, Vote } from '../models'
+import { Ballot, BallotConfig, GuildData, PollOptionKey, Poll, PollConfig, UserId, Vote, BallotOptionKey } from '../models'
 import { zipToRecord } from '../util/array'
 import { shuffled } from '../util/random'
 import { Storage } from './interface'
@@ -93,7 +93,7 @@ export class FirestoreStorage implements Storage {
             }
             return acc
         }, {} as Record<PollOptionKey, Vote>)
-        const randomizedBallotMapping = zipToRecord(shuffled(pollOptionKeys), pollOptionKeys)
+        const randomizedBallotMapping = zipToRecord(shuffled(pollOptionKeys), pollOptionKeys) as Record<BallotOptionKey, PollOptionKey>
         const ballot: Ballot = {
             pollId: poll.id,
             id: poll.id + userId,

@@ -28,12 +28,11 @@ export function resultsSummary(poll: Poll, results: RankingResults): MessageEmbe
     const footer = `Ranking Type: ${displayRankingType(results.rankingType)}\n`
     const table = columnify(
         results.rankings.map(({ key, rank, score }) => ({
-            key,
             rank,
             option: poll?.options[key],
             score,
         })), {
-        columns: ['rank', 'option', 'key',],
+        columns: ['rank', 'option'],
         align: 'right',
         columnSplitter: ' | '
     })

@@ -5,6 +5,7 @@ import storage from './storage'
 import { computeResults, resultsSummary } from './voting'
 import { showMatrix } from './voting/condorcet'
 import { L, PREFIX } from './settings'
+import { reverseLookup } from './util/record'
 
 export const POLLBOT_PREFIX = PREFIX
 export const CREATE_POLL_COMMAND = `${POLLBOT_PREFIX} poll`
@@ -426,7 +427,12 @@ export async function submitBallot(ctx: Context,  message: Message) {
         return await message.channel.send('There was a problem recording your ballot.')
     }
 
-    const summaryLines = validOptionKeys.map(key => ` ${votes[key] ? votes[key].rank : '_'}    | ${key}   | ${poll.options[key]}`)
+    let summaryLines = []
+    if (ballotOptionMapping) {
+        summaryLines = validOptionKeys.map(key => ` ${votes[key] ? votes[key].rank : '_'}    | ${reverseLookup(ballotOptionMapping, key)}   | ${poll.options[key]}`)
+    } else {
+        summaryLines = validOptionKeys.map(key => ` ${votes[key] ? votes[key].rank : '_'}    | ${key}   | ${poll.options[key]}`)
+    }
     summaryLines.sort()
 
     const responseEmbed = new MessageEmbed({

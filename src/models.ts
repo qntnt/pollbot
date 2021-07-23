@@ -31,7 +31,7 @@ export interface Ballot {
     createdAt: Date
     updatedAt: Date
     votes: Record<PollOptionKey, Vote>
-    ballotOptionMapping?: Partial<Record<BallotOptionKey, PollOptionKey>>
+    ballotOptionMapping?: Record<BallotOptionKey, PollOptionKey>
 }
 
 // Used to create new polls
