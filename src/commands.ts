@@ -478,7 +478,7 @@ function isGuildMember(user?: AnyUser | null): user is GuildMember {
     return false
 }
 
-function belongsToGuild(ctx: Context, poll: Poll, message: Message, bypassForBotOwner: boolean = true) {
+function belongsToGuild(ctx: Context, poll: Poll, message: Message, bypassForBotOwner = true) {
     if (bypassForBotOwner && ctx.checkPermissions(['botOwner'])) return true
     return poll.guildId === message.guild?.id
 }

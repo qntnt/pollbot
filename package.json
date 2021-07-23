@@ -8,6 +8,8 @@
     "license": "UNLICENSED",
     "devDependencies": {
         "@types/jest": "^26.0.20",
+        "@types/random": "^3.0.1",
+        "@types/seedrandom": "^3.0.1",
         "@typescript-eslint/eslint-plugin": "^4.13.0",
         "@typescript-eslint/parser": "^4.13.0",
         "eslint": "^7.17.0",
@@ -38,6 +40,8 @@
         "firebase-admin": "^9.4.2",
         "luxon": "^1.25.0",
         "moment": "^2.29.1",
-        "moment-timezone": "^0.5.32"
+        "moment-timezone": "^0.5.32",
+        "random": "^3.0.6",
+        "seedrandom": "^3.0.5"
     }
 }

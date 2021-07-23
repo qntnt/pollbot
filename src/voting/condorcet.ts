@@ -1,5 +1,6 @@
 import columnify from "columnify";
 import { L } from "../settings";
+import { shuffled } from "../util/random";
 import { Timer } from "../util/timer";
 import { Ranking, Vote, OptionMatrix, RankingResults, RankingMetrics } from "./interfaces";
 
@@ -262,10 +263,12 @@ function sortBy<T>(arr: T[], key: (o: T) => number): T[] {
     return arr.sort((a, b) => key(a) - key(b))
 }
 
-export function rankedPairs(options: string[], votes: Vote[]): RankingResults | undefined {
-    if (votes.length === 0) return
+function _rankedPairs(options: string[], votes: Vote[]): [string, number][] {
+    options = options.slice(0)
+    if (options.length === 0) return []
+    // No votes -> random ordering.
+    if (votes.length === 0) return shuffled(options).map(o => [o, 0])
 
-    const computeTimer = Timer.startTimer()
     const matrix = buildMatrix(options, votes)
     const rankedPairs = buildRankedPairs(options, matrix)
     const sorted = sortRankedPairs(rankedPairs)
@@ -276,30 +279,31 @@ export function rankedPairs(options: string[], votes: Vote[]): RankingResults | 
         score: locked[option]?.length ?? 0
     })), ({ score }) => -score)
 
-    let rank = 0
-    let prevScore = Number.MAX_SAFE_INTEGER
-    const rankings = _rankings.map(({ key, score }, i) => {
-        if (score < prevScore) {
-            rank++
-            prevScore = score
-        }
-        return {
-            key,
-            score,
-            rank,
-        }
-    })
+    const runWinner = _rankings[0]
+    if (!runWinner) return []
 
+    const runWinnerIndex = options.indexOf(runWinner.key)
+    options.splice(runWinnerIndex, 1)
+    const restRankings = _rankedPairs(options, votes)
+    return [ [runWinner.key, runWinner.score], ...restRankings ]
+}
+
+export function rankedPairs(options: string[], votes: Vote[]): RankingResults | undefined {
+    if (votes.length === 0) return
+
+    const computeTimer = Timer.startTimer()
+    const matrix = buildMatrix(options, votes)
+    const finalRankings = _rankedPairs(options, votes)
     const metrics: RankingMetrics = {
         voteCount: votes.length,
         computeDuration: computeTimer.endTimer()
     }
-
+    
     return {
         rankingType: 'rankedPairs',
-        rankings,
         matrix,
         metrics,
+        finalRankings,
     }
 }
 

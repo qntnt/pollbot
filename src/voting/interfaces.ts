@@ -26,7 +26,8 @@ export interface RankingMetrics {
 
 export interface RankingResults {
     rankingType: RankingType
-    rankings: Ranking[]
+    rankings?: Ranking[]
     matrix?: OptionMatrix
     metrics: RankingMetrics
+    finalRankings: [Option, number][]
 }

@@ -2,11 +2,13 @@ import columnify from "columnify";
 import { MessageEmbed } from "discord.js";
 import { POLL_ID_PREFIX } from "../commands";
 import { Ballot, Poll } from "../models";
+import { DEBUG } from "../settings";
+import { shuffled } from "../util/random";
 import { rankedPairs, showMatrix } from "./condorcet";
 import { RankingResults, RankingType, Vote } from "./interfaces";
 
 export function computeResults(poll: Poll, ballots: Ballot[]): RankingResults | undefined {
-    const optionKeys = Object.keys(poll?.options ?? {})
+    const optionKeys = Object.keys(poll?.options ?? {}).sort()
     const votes: Vote[] = ballots.map(b => {
         const v: Record<string, number> = {}
         optionKeys.forEach(k => {
@@ -14,7 +16,7 @@ export function computeResults(poll: Poll, ballots: Ballot[]): RankingResults | 
         })
         return v
     })
-    return rankedPairs(optionKeys, votes)
+    return rankedPairs(shuffled(optionKeys, poll.id), votes)
 }
 
 function displayRankingType(rankingType: RankingType): string {
@@ -26,24 +28,34 @@ function displayRankingType(rankingType: RankingType): string {
 
 export function resultsSummary(poll: Poll, results: RankingResults): MessageEmbed {
     const footer = `Ranking Type: ${displayRankingType(results.rankingType)}\n`
-    const table = columnify(
-        results.rankings.map(({ key, rank, score }) => ({
-            rank,
-            option: poll?.options[key],
-            score,
-        })), {
-        columns: ['rank', 'option'],
+    const columns = DEBUG ? ['rank', 'option', 'score'] : ['rank', 'option']
+    const finalRankings = columnify(results.finalRankings.map(([key, score], i) => ({ option: poll.options[key], rank: i + 1, score })), {
+        columns,
         align: 'right',
-        columnSplitter: ' | '
+        columnSplitter: ' | ',
     })
     const metrics = (
         `Ballot count: ${results.metrics.voteCount}\n` +
         `Time to compute: ${results.metrics.computeDuration.toFormat('S')}ms\n`
     )
     const embed = new MessageEmbed()
-        .addField(poll.topic, '```\n'+
-            table +
-            '\n```')
+        .addField(poll.topic, '```'+finalRankings+'```')
+    
+    const closeCalls = []
+    for (let i = 1; i < results.finalRankings.length; i++) {
+        const [prev, prevScore] = results.finalRankings[i - 1]
+        const [curr, currScore] = results.finalRankings[i]
+        if (prevScore <= currScore) {
+            closeCalls.push([prev, curr])
+        }
+    }
+
+    if (closeCalls.length > 0) {
+        const closeCallMsg = closeCalls.map(([p, c]) => `- \`${poll.options[p]}\` beat \`${poll.options[c]}\``).join('\n')
+        embed.addField('These were close calls!', closeCallMsg)
+    }
+
+    embed
         .addField('Metrics', metrics)
         .addField('Info', footer)
         .setFooter(`${POLL_ID_PREFIX}${poll.id}`)
