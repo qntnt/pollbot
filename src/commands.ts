@@ -364,11 +364,13 @@ export async function submitBallot(ctx: Context,  message: Message) {
     const limit = 50
     const history = await message.channel.messages.fetch({ limit })
     const lastBallotText = history.find(m => findPollId(m) !== undefined)
+    //Combined the message content operations so that we can reduce the number of times we make it lower case.
+    const message_content = message.content.toLowerCase();
     if (!lastBallotText) {
         return await message.channel.send(`Could not find a pollId in the last ${limit} messages`)
     }
 
-    if (message.content.toLowerCase().startsWith(POLLBOT_PREFIX)) {
+    if (message_content.startsWith(POLLBOT_PREFIX)) {
         return await message.channel.send('DMs are for submitting ballots. Manage polls in public channels.')
     }
 
@@ -392,7 +394,7 @@ export async function submitBallot(ctx: Context,  message: Message) {
     }
 
     const validOptionKeys = Object.keys(poll.options).sort()
-    const voteKeys = message.content.trim().split(',')
+    const voteKeys = message_content.trim().split(',')
         .map(key => key.trim())
     const validVoteKeys = voteKeys.filter(key => validOptionKeys.find((ok) => ok === key))
     let votes: Record<PollOptionKey, Vote> = {}
