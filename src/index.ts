@@ -43,10 +43,10 @@ client.on('guildDelete', async guild => {
 })
 
 function isCommand(message: Discord.Message, command: string): boolean {
-    return message.content.toLowerCase().startsWith(command)
+    return message.content.toLowerCase().startsWith(command.toLowerCase())
 }
 
-client.on('messageCreate', async message => {
+client.on('message', async message => {
     try {
         const ctx = context.withMessage(message)
         // Ignore bot messages
@@ -77,6 +77,14 @@ client.on('messageCreate', async message => {
         }
         if (isCommand(message, commands.AUDIT_POLL_COMMAND)) {
             await commands.auditPoll(ctx, message)
+            return
+        }
+        if (isCommand(message, commands.ADD_POLL_FEATURES_COMMAND)) {
+            await commands.addPollFeatures(ctx, message)
+            return
+        }
+        if (isCommand(message, commands.REMOVE_POLL_FEATURES_COMMAND)) {
+            await commands.removePollFeatures(ctx, message)
             return
         }
         await commands.help(ctx, message)

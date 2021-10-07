@@ -42,6 +42,14 @@ export interface PollConfig {
     options: Record<PollOptionKey, Option>,
 }
 
+const pollFeatures = 
+    [ 'disableRandomizedBallots'
+    ] as const
+
+export const POLL_FEATURES = new Set(pollFeatures)
+
+export type PollFeature = (typeof pollFeatures)[number]
+
 export interface Poll {
     id: PollId
     guildId: GuildId
@@ -51,4 +59,5 @@ export interface Poll {
     topic: string
     options: Record<PollOptionKey, Option>
     ballots: Record<UserId, Ballot>
+    features?: PollFeature[]
 }

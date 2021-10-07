@@ -1,6 +1,6 @@
 import { Client, ClientApplication, GuildMember, Message, MessageAttachment, MessageEmbed, MessageReaction, PartialMessage, PartialUser, Team, TeamMember, User } from 'discord.js'
 import moment from 'moment-timezone'
-import { Option, PollOptionKey, Poll, PollConfig, PollId, Vote, BallotOptionKey } from './models'
+import { Option, PollOptionKey, Poll, PollConfig, PollId, Vote, PollFeature, POLL_FEATURES } from './models'
 import storage from './storage'
 import { computeResults, resultsSummary } from './voting'
 import { showMatrix } from './voting/condorcet'
@@ -13,6 +13,8 @@ export const CREATE_POLL_COMMAND = `${POLLBOT_PREFIX} poll`
 export const CLOSE_POLL_COMMAND = `${POLLBOT_PREFIX} close`
 export const POLL_RESULTS_COMMAND = `${POLLBOT_PREFIX} results`
 export const AUDIT_POLL_COMMAND = `${POLLBOT_PREFIX} audit`
+export const ADD_POLL_FEATURES_COMMAND = `${POLLBOT_PREFIX} addFeatures`
+export const REMOVE_POLL_FEATURES_COMMAND = `${POLLBOT_PREFIX} removeFeatures`
 
 export const POLL_ID_PREFIX = 'poll#'
 
@@ -226,6 +228,102 @@ async function createPollHelp(message: Message) {
     )
 }
 
+export async function addPollFeatures(ctx: Context, message: Message) {
+    const [pollId, ...features] = message.content.substring(
+        ADD_POLL_FEATURES_COMMAND.length,
+        message.content.length
+    ).trim().split(new RegExp('\\s'))
+    if (pollId === '') {
+        return await addPollFeatureslHelp(ctx, message)
+    }
+    const poll = await storage.getPoll(pollId)
+    if (!poll) {
+        return await message.channel.send(`I couldn't find poll ${pollId}`)
+    }
+
+    try {
+        await ctx.checkPermissions(['botOwner', 'guildAdmin', 'pollOwner'], poll)
+    } catch {
+        return await message.channel.send(`You don't have permission to edit this poll`)
+    }
+
+    const validatedFeatures = features.filter(feature => (POLL_FEATURES as Set<string>).has(feature)) as PollFeature[]
+    const pollFeatures = new Set(poll.features ?? [])
+    for (const feature of validatedFeatures) {
+        pollFeatures.add(feature)
+    }
+    const newFeatures = Array.from(pollFeatures)
+    await storage.updatePoll(poll.id, {
+        ...poll,
+        features: newFeatures,
+    })
+    const reply = new MessageEmbed({ description: `Poll#${poll.id} updated!`})
+    if (newFeatures.length > 0) {
+        reply.addField('Features', newFeatures.join(', '))
+    }
+    await message.channel.send({
+        embeds: [ reply ]
+    })
+}
+
+async function addPollFeatureslHelp(ctx: Context, message: Message) {
+    const exampleFeature: PollFeature = 'disableRandomizedBallots'
+    return await message.channel.send(
+        `Add poll features with this command format:\n` +
+        `\`${ADD_POLL_FEATURES_COMMAND} <pollId> <feature1> <feature2> <...>\`\n\n` +
+        `Example:\n` +
+        `\`${ADD_POLL_FEATURES_COMMAND} 1234 ${exampleFeature}\``
+    )
+}
+
+export async function removePollFeatures(ctx: Context, message: Message) {
+    const [pollId, ...features] = message.content.substring(
+        REMOVE_POLL_FEATURES_COMMAND.length,
+        message.content.length
+    ).trim().split(new RegExp('\\s'))
+    if (pollId === '') {
+        return await removePollFeatureslHelp(ctx, message)
+    }
+    const poll = await storage.getPoll(pollId)
+    if (!poll) {
+        return await message.channel.send(`I couldn't find poll ${pollId}`)
+    }
+
+    try {
+        await ctx.checkPermissions(['botOwner', 'guildAdmin', 'pollOwner'], poll)
+    } catch {
+        return await message.channel.send(`You don't have permission to edit this poll`)
+    }
+
+    const validatedFeatures = features.filter(feature => (POLL_FEATURES as Set<string>).has(feature)) as PollFeature[]
+    const pollFeatures = new Set(poll.features ?? [])
+    for (const feature of validatedFeatures) {
+        pollFeatures.delete(feature)
+    }
+    const newFeatures = Array.from(pollFeatures)
+    await storage.updatePoll(poll.id, {
+        ...poll,
+        features: newFeatures,
+    })
+    const reply = new MessageEmbed({ description: `Poll#${poll.id} updated!`})
+    if (newFeatures.length > 0) {
+        reply.addField('Features', newFeatures.join(', '))
+    }
+    await message.channel.send({
+        embeds: [ reply ]
+    })
+}
+
+async function removePollFeatureslHelp(ctx: Context, message: Message) {
+    const exampleFeature: PollFeature = 'disableRandomizedBallots'
+    return await message.channel.send(
+        `Add poll features with this command format:\n` +
+        `\`${ADD_POLL_FEATURES_COMMAND} <pollId> <feature1> <feature2> <...>\`\n\n` +
+        `Example:\n` +
+        `\`${ADD_POLL_FEATURES_COMMAND} 1234 ${exampleFeature}\``
+    )
+}
+
 export async function closePoll(ctx: Context,  message: Message) {
     const pollId = message.content.substring(
         CLOSE_POLL_COMMAND.length,
@@ -244,7 +342,8 @@ export async function closePoll(ctx: Context,  message: Message) {
     } catch {
         return await message.channel.send(`You don't have permission to close this poll`)
     }
-    const newPoll = storage.updatePoll(poll.id, {
+    // Update poll closing time in background
+    storage.updatePoll(poll.id, {
         closesAt: moment().toDate()
     })
     const resultMessage = await message.channel.send({
@@ -314,7 +413,7 @@ async function pollResultsHelp(message: Message) {
     return await message.channel.send(`View poll results with this command format:\n\`${POLL_RESULTS_COMMAND} <pollId>\``)
 }
 
-const POLL_EXPR = new RegExp(`^>?\s?${POLL_ID_PREFIX}(.+)`)
+const POLL_EXPR = new RegExp(`^>?\\s?${POLL_ID_PREFIX}(.+)`)
 
 function extractPollId(text: string | undefined): PollId | undefined {
     const m = text?.match(POLL_EXPR)
@@ -352,8 +451,9 @@ export async function createBallot(ctx: Context, reaction: MessageReaction, user
     }
 
     let optionText = ''
+    const disableRandomizedBallots = poll.features?.includes('disableRandomizedBallots') ?? false
     const ballotOptionMapping = ballot.ballotOptionMapping
-    if (ballotOptionMapping) {
+    if (ballotOptionMapping && !disableRandomizedBallots) {
         optionText = Object.keys(ballotOptionMapping).sort().map(ballotKey => {
             const pollOptionKey = ballotOptionMapping[ballotKey] ?? ''
             const pollOption = poll.options[pollOptionKey]
@@ -414,8 +514,9 @@ export async function submitBallot(ctx: Context,  message: Message) {
         .map(key => key.trim())
     const validVoteKeys = voteKeys.filter(key => validOptionKeys.find((ok) => ok === key))
     let votes: Record<PollOptionKey, Vote> = {}
+    const disableRandomizedBallot = poll.features?.includes('disableRandomizedBallots') ?? false
     const ballotOptionMapping = ballot.ballotOptionMapping
-    if (ballotOptionMapping) {
+    if (ballotOptionMapping && !disableRandomizedBallot) {
         votes = validVoteKeys
             .reduce((acc, ballotKey, i) => {
                 const pollOptionKey = ballotOptionMapping[ballotKey]
@@ -446,7 +547,7 @@ export async function submitBallot(ctx: Context,  message: Message) {
     }
 
     let summaryLines = []
-    if (ballotOptionMapping) {
+    if (ballotOptionMapping && !disableRandomizedBallot) {
         summaryLines = validOptionKeys.map(key => ` ${votes[key] ? votes[key].rank : '_'}    | ${reverseLookup(ballotOptionMapping, key)}   | ${poll.options[key]}`)
     } else {
         summaryLines = validOptionKeys.map(key => ` ${votes[key] ? votes[key].rank : '_'}    | ${key}   | ${poll.options[key]}`)
