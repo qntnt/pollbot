@@ -1,4 +1,4 @@
-import { Client, ClientApplication, GuildMember, Message, MessageAttachment, MessageEmbed, MessageReaction, PartialUser, Team, TeamMember, User } from 'discord.js'
+import { Client, ClientApplication, GuildMember, Message, MessageAttachment, MessageEmbed, MessageReaction, PartialMessage, PartialUser, Team, TeamMember, User } from 'discord.js'
 import moment from 'moment-timezone'
 import { Option, PollOptionKey, Poll, PollConfig, PollId, Vote, BallotOptionKey } from './models'
 import storage from './storage'
@@ -6,6 +6,7 @@ import { computeResults, resultsSummary } from './voting'
 import { showMatrix } from './voting/condorcet'
 import { L, PREFIX } from './settings'
 import { reverseLookup } from './util/record'
+import { delay } from '@qntnt/ts-utils/lib/promise'
 
 export const POLLBOT_PREFIX = PREFIX
 export const CREATE_POLL_COMMAND = `${POLLBOT_PREFIX} poll`
@@ -17,7 +18,7 @@ export const POLL_ID_PREFIX = 'poll#'
 
 
 function isTeam(userTeam: User | Team | null | undefined): userTeam is Team {
-        return userTeam !== undefined && (userTeam as Team).ownerID !== null
+        return userTeam !== undefined && (userTeam as Team).ownerId !== null
 }
 
 function isMessage(interaction: Interaction | undefined): interaction is Message {
@@ -41,7 +42,7 @@ export class Context {
         botOwner?: BotOwner,
         interaction?: Interaction,
         user?: AnyUser,
-        isInitialized: boolean = false
+        isInitialized = false
     ) {
         this._client = client
         this._application = application
@@ -59,7 +60,7 @@ export class Context {
     }
 
     withMessage(message: Message): Context {
-        const user = message.channel.type === 'dm' ? message.author : message.member ?? message.author
+        const user = message.channel.type === 'DM' ? message.author : message.member ?? message.author
         return new Context(
             this._client,
             this._application,
@@ -84,7 +85,7 @@ export class Context {
     clone(
         interaction?: Interaction,
         user?: AnyUser,
-        isInitialized: boolean = false
+        isInitialized = false
     ): Context {
         return new Context(
             this._client,
@@ -97,7 +98,11 @@ export class Context {
     }
 
     async client(): Promise<Client> {
-        return this._client
+        if (this._client.isReady()) {
+            return this._client
+        }
+        await delay(1000)
+        return await this.client()
     }
 
     async application(): Promise<ClientApplication> {
@@ -130,7 +135,7 @@ export class Context {
             return true
         }
         if (hasPerm('guildAdmin') && isGuildMember(this.user) && poll) {
-            return this.user.hasPermission('ADMINISTRATOR') === true && this.user.guild.id === poll.guildId
+            return this.user.permissions.has('ADMINISTRATOR') === true && this.user.guild.id === poll.guildId
         }
         if (hasPerm('botOwner') && this.isBotOwner(this.user)) {
             return true
@@ -145,7 +150,7 @@ export class Context {
     private async fetchApplication(): Promise<ClientApplication> {
         if (this._application === undefined) {
             const client = await this.client()
-            this._application = await client.fetchApplication()
+            this._application = client.application as ClientApplication
         }
         return this._application
     }
@@ -206,7 +211,9 @@ export async function createPoll(ctx: Context, message: Message) {
     })
     .addField(poll.topic, optionText)
     .setFooter(`This poll closes at ${closesAt}`)
-    const pollMessage = await message.channel.send(pollMsgEmbed)
+    const pollMessage = await message.channel.send({
+        embeds: [pollMsgEmbed]
+    })
     await pollMessage.react('👋')
 }
 
@@ -240,9 +247,13 @@ export async function closePoll(ctx: Context,  message: Message) {
     const newPoll = storage.updatePoll(poll.id, {
         closesAt: moment().toDate()
     })
-    const resultMessage = await message.channel.send(new MessageEmbed({
-        description: 'Computing results...'
-    }))
+    const resultMessage = await message.channel.send({
+        embeds: [
+            new MessageEmbed({
+                description: 'Computing results...'
+            })
+        ],
+    })
     try {
         const ballots = await storage.listBallots(poll.id)
         const results = computeResults(poll, ballots)
@@ -251,7 +262,9 @@ export async function closePoll(ctx: Context,  message: Message) {
         }
         const summary = resultsSummary(poll, results)
         summary.setTitle(`${POLL_ID_PREFIX}${poll.id} is now closed.`)
-        return await resultMessage.edit(summary)
+        return await resultMessage.edit({
+            embeds: [summary]
+        })
     } catch {
         return await resultMessage.edit(`There was an issue computing results for poll ${poll.id}`)
     }
@@ -292,7 +305,9 @@ export async function pollResults(ctx: Context, message: Message) {
     }
 
     const summary = resultsSummary(poll, results)
-    return await message.channel.send(summary)
+    return await message.channel.send({
+        embeds: [summary]
+    })
 }
 
 async function pollResultsHelp(message: Message) {
@@ -307,8 +322,8 @@ function extractPollId(text: string | undefined): PollId | undefined {
     return m[1]
 }
 
-function findPollId(message: Message): string | undefined {
-    let pollId = extractPollId(message.content)
+function findPollId(message: Message | PartialMessage): string | undefined {
+    let pollId = extractPollId(message.content ?? '')
     if (pollId) return pollId
     pollId = extractPollId(message.embeds[0]?.title ?? undefined)
     return pollId
@@ -317,7 +332,7 @@ function findPollId(message: Message): string | undefined {
 export async function createBallot(ctx: Context, reaction: MessageReaction, user: User | PartialUser) {
     const pollId = findPollId(reaction.message)
     if (!pollId) {
-        L.d(`Couldn't find poll for new ballot: ${reaction.message.content.substring(0, POLL_ID_PREFIX.length)}`)
+        L.d(`Couldn't find poll for new ballot: ${reaction.message.content?.substring(0, POLL_ID_PREFIX.length)}`)
         return await user.send('There was an issue creating your ballot. Couldn\'t parse pollId')
     }
     const poll = await storage.getPoll(pollId)
@@ -357,7 +372,9 @@ export async function createBallot(ctx: Context, reaction: MessageReaction, user
             `_Invalid options will be ignored_\n`)
         .addField(poll.topic, `\`\`\`\n${optionText}\n\`\`\``)
         .setFooter(`Privacy notice: Your user id and current user name is linked to your ballot. Your ballot is viewable by you and bot admins.\n\nballot#${ballot.id}`)
-    user.send(responseEmbed)
+    user.send({
+        embeds: [responseEmbed]
+    })
 }
 
 export async function submitBallot(ctx: Context,  message: Message) {
@@ -368,7 +385,8 @@ export async function submitBallot(ctx: Context,  message: Message) {
         return await message.channel.send(`Could not find a pollId in the last ${limit} messages`)
     }
 
-    if (message.content.toLowerCase().startsWith(POLLBOT_PREFIX)) {
+    const messageContent = message.content.toLowerCase()
+    if (messageContent.startsWith(POLLBOT_PREFIX)) {
         return await message.channel.send('DMs are for submitting ballots. Manage polls in public channels.')
     }
 
@@ -392,7 +410,7 @@ export async function submitBallot(ctx: Context,  message: Message) {
     }
 
     const validOptionKeys = Object.keys(poll.options).sort()
-    const voteKeys = message.content.trim().split(',')
+    const voteKeys = messageContent.trim().split(',')
         .map(key => key.trim())
     const validVoteKeys = voteKeys.filter(key => validOptionKeys.find((ok) => ok === key))
     let votes: Record<PollOptionKey, Vote> = {}
@@ -446,7 +464,9 @@ export async function submitBallot(ctx: Context,  message: Message) {
         .setFooter(`${POLL_ID_PREFIX}${poll.id}\nballot#${ballot.id}`)
         .setTimestamp()
 
-    return message.channel.send(responseEmbed)
+    return message.channel.send({
+        embeds: [responseEmbed]
+    })
 }
 
 export async function help(ctx: Context,  message: Message) {
@@ -515,7 +535,9 @@ export async function auditPoll(ctx: Context, message: Message) {
     }
     const summary = resultsSummary(poll, results)
     const matrixSummary = showMatrix(results.matrix)
-    await message.channel.send(summary)
+    await message.channel.send({
+        embeds: [summary]
+    })
     const matrixEmbed = new MessageEmbed()
         .addField('Pairwise Comparison Matrix', 
         'To read this, each value in a row shows who wins a matchup between candidates\n' +
@@ -523,7 +545,9 @@ export async function auditPoll(ctx: Context, message: Message) {
         matrixSummary +
         '```')
     if (matrixEmbed.length <= 2000) {
-        await message.channel.send(matrixEmbed)
+        await message.channel.send({
+            embeds: [matrixEmbed]
+        })
     } else {
         await message.channel.send('Your poll has too many options to render a pairwise comparison matrix.')
     }
@@ -546,10 +570,16 @@ export async function auditPoll(ctx: Context, message: Message) {
     }))
     const csvBuffer = Buffer.from(csvText)
     const attachment = new MessageAttachment(csvBuffer, `poll_${poll.id}_votes.csv`)
-    await message.author.send(attachment)
-    await message.channel.send(new MessageEmbed({
-        description: `I sent you a direct message with a \`.csv\` file that contains all ballot data for \`${POLL_ID_PREFIX}${poll.id}\`.`
-    }))
+    await message.author.send({
+        embeds: [attachment]
+    })
+    await message.channel.send({
+        embeds: [
+            new MessageEmbed({
+                description: `I sent you a direct message with a \`.csv\` file that contains all ballot data for \`${POLL_ID_PREFIX}${poll.id}\`.`
+            })
+        ]
+    })
 }
 
 async function auditPollHelp(message: Message) {

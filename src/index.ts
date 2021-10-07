@@ -3,7 +3,15 @@ import { DISCORD_TOKEN, L } from './settings'
 import * as commands from './commands'
 import storage from './storage'
 
-const client = new Discord.Client()
+const client = new Discord.Client({
+    intents: [
+        'DIRECT_MESSAGES',
+        'DIRECT_MESSAGE_REACTIONS',
+        'GUILDS',
+        'GUILD_MESSAGES',
+        'GUILD_MESSAGE_REACTIONS',
+    ]
+})
 const context = new commands.Context(client)
 context.init()
 
@@ -38,40 +46,46 @@ function isCommand(message: Discord.Message, command: string): boolean {
     return message.content.toLowerCase().startsWith(command)
 }
 
-client.on('message', async message => {
+client.on('messageCreate', async message => {
     try {
         const ctx = context.withMessage(message)
         // Ignore bot messages
         if (message.author.id === client.user?.id) return
 
-        if (message.channel.type === 'dm') {
+        if (message.channel.type === 'DM') {
             // Direct messages are votes
-            return await commands.submitBallot(ctx, message)
+            await commands.submitBallot(ctx, message)
+            return
         }
 
-        if (message.channel.type !== 'text') return
+        if (message.channel.type !== 'GUILD_TEXT') return
         // Public channel commands
         if (!isCommand(message, commands.POLLBOT_PREFIX)) {
             return
         }
         if (isCommand(message, commands.CREATE_POLL_COMMAND)) {
-            return await commands.createPoll(ctx, message)
+            await commands.createPoll(ctx, message)
+            return
         }
         if (isCommand(message, commands.CLOSE_POLL_COMMAND)) {
-            return await commands.closePoll(ctx, message)
+            await commands.closePoll(ctx, message)
+            return
         }
         if (isCommand(message, commands.POLL_RESULTS_COMMAND)) {
-            return await commands.pollResults(ctx, message)
+            await commands.pollResults(ctx, message)
+            return
         }
         if (isCommand(message, commands.AUDIT_POLL_COMMAND)) {
-            return await commands.auditPoll(ctx, message)
+            await commands.auditPoll(ctx, message)
+            return
         }
-        return await commands.help(ctx, message)
+        await commands.help(ctx, message)
+        return
     } catch(e) {
         console.error(e)
-        return await message.channel.send('There was an unknown error with your command. Sorry about that.')
+        await message.channel.send('There was an unknown error with your command. Sorry about that.')
     }
-})
+},)
 
 client.on('raw', async packet => {
     if (!['MESSAGE_REACTION_ADD'].includes(packet.t)) return
@@ -97,7 +111,7 @@ client.on('raw', async packet => {
 })
 
 client.on('messageReactionAdd', async (reaction, user) => {
-    const ctx = context.withMessageReaction(reaction, user)
+    const ctx = context.withMessageReaction(reaction as Discord.MessageReaction, user)
     try {
         if (!client.user?.id) {
             return
@@ -105,14 +119,15 @@ client.on('messageReactionAdd', async (reaction, user) => {
         if (user.id === client.user.id) {
             return
         }
-        if (reaction.message.author.id !== client.user.id) {
+        if (reaction.message?.author?.id !== client.user.id) {
             return
         }
         if (!user) {
             return
         }
         if (reaction.message.embeds[0]?.title?.startsWith(commands.POLL_ID_PREFIX) === true) {
-            return await commands.createBallot(ctx, reaction, user)
+            await commands.createBallot(ctx, reaction as Discord.MessageReaction, user)
+            return
         }
         L.d(`Couldn't find poll from reaction: ${reaction.emoji} on message ${reaction.message.id}...`)
     } catch {

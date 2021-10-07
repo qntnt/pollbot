@@ -27,6 +27,7 @@
         "test": "jest"
     },
     "dependencies": {
+        "@qntnt/ts-utils": "^1.0.0",
         "@tsconfig/recommended": "^1.0.1",
         "@types/columnify": "^1.5.0",
         "@types/luxon": "^1.25.1",
@@ -35,7 +36,7 @@
         "@types/node": "^14.14.20",
         "columnify": "^1.5.4",
         "csv": "^5.3.2",
-        "discord.js": "^12.5.1",
+        "discord.js": "^13.2.0",
         "firebase": "^8.2.2",
         "firebase-admin": "^9.4.2",
         "luxon": "^1.25.0",
