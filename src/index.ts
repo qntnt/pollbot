@@ -79,6 +79,10 @@ client.on('message', async message => {
             await commands.auditPoll(ctx, message)
             return
         }
+        if (isCommand(message, commands.SET_POLL_PROPERTIES_COMMAND)) {
+            await commands.setPollProperties(ctx, message)
+            return
+        }
         if (isCommand(message, commands.ADD_POLL_FEATURES_COMMAND)) {
             await commands.addPollFeatures(ctx, message)
             return

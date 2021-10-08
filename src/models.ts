@@ -61,3 +61,12 @@ export interface Poll {
     ballots: Record<UserId, Ballot>
     features?: PollFeature[]
 }
+
+const editablePollPropNames = 
+    [ 'closesAt'
+    , 'topic'
+    ] as const
+
+export const EDITABLE_POLL_PROPS = new Set(editablePollPropNames)
+
+export type EditablePollProperty = (typeof editablePollPropNames)[number]

@@ -1,12 +1,13 @@
 import { Client, ClientApplication, GuildMember, Message, MessageAttachment, MessageEmbed, MessageReaction, PartialMessage, PartialUser, Team, TeamMember, User } from 'discord.js'
 import moment from 'moment-timezone'
-import { Option, PollOptionKey, Poll, PollConfig, PollId, Vote, PollFeature, POLL_FEATURES } from './models'
+import { Option, PollOptionKey, Poll, PollConfig, PollId, Vote, PollFeature, POLL_FEATURES, EDITABLE_POLL_PROPS, EditablePollProperty } from './models'
 import storage from './storage'
 import { computeResults, resultsSummary } from './voting'
 import { showMatrix } from './voting/condorcet'
 import { L, PREFIX } from './settings'
 import { reverseLookup } from './util/record'
 import { delay } from '@qntnt/ts-utils/lib/promise'
+import { DateTime } from 'luxon'
 
 export const POLLBOT_PREFIX = PREFIX
 export const CREATE_POLL_COMMAND = `${POLLBOT_PREFIX} poll`
@@ -15,6 +16,7 @@ export const POLL_RESULTS_COMMAND = `${POLLBOT_PREFIX} results`
 export const AUDIT_POLL_COMMAND = `${POLLBOT_PREFIX} audit`
 export const ADD_POLL_FEATURES_COMMAND = `${POLLBOT_PREFIX} addFeatures`
 export const REMOVE_POLL_FEATURES_COMMAND = `${POLLBOT_PREFIX} removeFeatures`
+export const SET_POLL_PROPERTIES_COMMAND = `${POLLBOT_PREFIX} set`
 
 export const POLL_ID_PREFIX = 'poll#'
 
@@ -227,6 +229,74 @@ async function createPollHelp(message: Message) {
         `\`${CREATE_POLL_COMMAND} Best food? pizza, pasta, beets\``
     )
 }
+
+
+export async function setPollProperties(ctx: Context, message: Message) {
+    const content = message.content.substring(
+        SET_POLL_PROPERTIES_COMMAND.length,
+        message.content.length
+    ).trim()
+    L.d(content)
+    const pollId = content.substring(0, content.indexOf(' '))
+    if (pollId === '') {
+        return await addPollFeatureslHelp(ctx, message)
+    }
+    const poll = await storage.getPoll(pollId)
+    if (!poll) {
+        return await message.channel.send(`I couldn't find poll ${pollId}`)
+    }
+
+    try {
+        await ctx.checkPermissions(['botOwner', 'guildAdmin', 'pollOwner'], poll)
+    } catch {
+        return await message.channel.send(`You don't have permission to edit this poll`)
+    }
+
+    const propertySetters = content.substring(pollId.length, content.length)
+        .split('|')
+        .map(s => s.trim())
+    const embed = new MessageEmbed({ description: `Poll#${poll.id} updated!`})
+    propertySetters.forEach(setter => {
+        const splitAt = setter.indexOf('=')
+        if (splitAt === -1) return undefined
+        const propName = setter.substring(0, splitAt).trim()
+        if (!(EDITABLE_POLL_PROPS as Set<string>).has(propName)) {
+            return
+        }
+        const validatedPropName = propName as EditablePollProperty
+        const propValue = setter.substring(splitAt + 1, setter.length).trim()
+        switch (validatedPropName) {
+            case 'closesAt': {
+                const date = DateTime.fromISO(propValue)
+                poll.closesAt = date.toJSDate()
+                embed.setFooter('closesAt')
+                embed.setTimestamp(date.toMillis())
+                break
+            }
+            case 'topic': {
+                poll.topic = propValue
+                embed.addField('topic', propValue)
+                break
+            }
+        }
+    })
+    await storage.updatePoll(poll.id, poll)
+    return message.channel.send({
+        embeds: [
+            embed
+        ]
+    })
+}
+
+async function setPollPropertiesHelp(message: Message) {
+    return await message.channel.send(
+        `Create polls with this command format:\n` +
+        `\`${CREATE_POLL_COMMAND} <topic>? <comma-separated options>\`\n\n` +
+        `Example:\n` +
+        `\`${CREATE_POLL_COMMAND} Best food? pizza, pasta, beets\``
+    )
+}
+
 
 export async function addPollFeatures(ctx: Context, message: Message) {
     const [pollId, ...features] = message.content.substring(
