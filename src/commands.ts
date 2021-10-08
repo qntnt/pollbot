@@ -321,7 +321,7 @@ export async function setPollProperties(ctx: Context, message: Message) {
 }
 
 async function setPollPropertiesHelp(ctx: Context, message: Message) {
-    const closesAt = DateTime.now()
+    const closesAt = DateTime.fromJSDate(new Date())
         .plus({ days: 5 })
         .setZone('UTC+5')
         .set({
