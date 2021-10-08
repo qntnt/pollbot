@@ -1,8 +1,9 @@
 import * as admin from 'firebase-admin'
 import moment from 'moment'
-import { Ballot, BallotConfig, GuildData, PollOptionKey, Poll, PollConfig, UserId, Vote, BallotOptionKey } from '../models'
+import { Ballot, BallotConfig, GuildData, PollOptionKey, Poll, PollConfig, UserId, Vote, BallotOptionKey, UserDataMetrics } from '../models'
 import { zipToRecord } from '../util/array'
 import { shuffled } from '../util/random'
+import { Actions } from '../util/Actions'
 import { Storage } from './interface'
 
 admin.initializeApp()
@@ -136,5 +137,28 @@ export class FirestoreStorage implements Storage {
             .get()
         return snapshot.docs.map(doc => doc.data()) as Ballot[]
     }
-}
 
+    async getUserDataMetrics(userId: string): Promise<UserDataMetrics> {
+        const pollSnapshot = await this.pollCollection.where('ownerId', '==', userId).get()
+        const numPolls = pollSnapshot.size
+        const ballotSnapshot = await this.ballotCollection.where('userId', '==', userId).get()
+        const numBallots = ballotSnapshot.size
+        return {
+            numPolls,
+            numBallots,
+        }
+    }
+
+    async deleteUserData(userId: string): Promise<UserDataMetrics> {
+        const pollSnapshot = await this.pollCollection.where('ownerId', '==', userId).get()
+        const ballotSnapshot = await this.ballotCollection.where('userId', '==', userId).get()
+        const metrics = {
+            numPolls: pollSnapshot.size,
+            numBallots: ballotSnapshot.size,
+        }
+        const deletePollActions = pollSnapshot.docs.map((doc) => () => doc.ref.delete())
+        const deleteBallotActions = ballotSnapshot.docs.map((doc) => () => doc.ref.delete())
+        await Actions.runAll(3, [...deletePollActions, ...deleteBallotActions])
+        return metrics
+    }
+}

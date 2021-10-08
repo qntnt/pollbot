@@ -91,6 +91,10 @@ client.on('message', async message => {
             await commands.removePollFeatures(ctx, message)
             return
         }
+        if (isCommand(message, commands.DELETE_MY_USER_DATA_COMMAND)) {
+            await commands.deleteMyUserData(ctx, message)
+            return
+        }
         await commands.help(ctx, message)
         return
     } catch(e) {
@@ -128,17 +132,25 @@ client.on('messageReactionAdd', async (reaction, user) => {
         if (!client.user?.id) {
             return
         }
+        // DO NOT HANDLE POLLBOT REACTIONS
         if (user.id === client.user.id) {
             return
         }
+        // ONLY HANDLE REACTIONS TO POLLBOT MESSAGES
         if (reaction.message?.author?.id !== client.user.id) {
             return
         }
         if (!user) {
             return
         }
+        L.d(reaction.message.embeds[0]?.title)
         if (reaction.message.embeds[0]?.title?.startsWith(commands.POLL_ID_PREFIX) === true) {
+            L.d('Creating ballot...')
             await commands.createBallot(ctx, reaction as Discord.MessageReaction, user)
+            return
+        }
+        if (reaction.message.embeds[0]?.title === commands.DELETE_USER_DATA_CONFIRM_TITLE) {
+            await commands.deleteMyUserDataConfirm(ctx, reaction as Discord.MessageReaction, user)
             return
         }
         L.d(`Couldn't find poll from reaction: ${reaction.emoji} on message ${reaction.message.id}...`)

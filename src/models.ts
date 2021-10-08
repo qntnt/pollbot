@@ -42,13 +42,18 @@ export interface PollConfig {
     options: Record<PollOptionKey, Option>,
 }
 
-const pollFeatures = 
-    [ 'disableRandomizedBallots'
-    ] as const
+export const POLL_FEATURES = {
+    disableRandomizedBallots: {
+        description: 'Disables randomized ballot option ordering',
+    },
+}
 
-export const POLL_FEATURES = new Set(pollFeatures)
+export type PollFeature = keyof (typeof POLL_FEATURES)
 
-export type PollFeature = (typeof pollFeatures)[number]
+export const POLL_FEATURES_ARRAY = Object.keys(POLL_FEATURES) as PollFeature[]
+
+export const POLL_FEATURES_SET = new Set(POLL_FEATURES_ARRAY)
+
 
 export interface Poll {
     id: PollId
@@ -70,3 +75,8 @@ const editablePollPropNames =
 export const EDITABLE_POLL_PROPS = new Set(editablePollPropNames)
 
 export type EditablePollProperty = (typeof editablePollPropNames)[number]
+
+export interface UserDataMetrics {
+    numPolls: number
+    numBallots: number
+}

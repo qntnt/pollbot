@@ -1,13 +1,15 @@
-import { Client, ClientApplication, GuildMember, Message, MessageAttachment, MessageEmbed, MessageReaction, PartialMessage, PartialUser, Team, TeamMember, User } from 'discord.js'
+import { Client, ClientApplication, GuildMember, Message, MessageAttachment, MessageEmbed, MessagePayload, MessageReaction, PartialMessage, PartialUser, Team, TeamMember, User } from 'discord.js'
 import moment from 'moment-timezone'
-import { Option, PollOptionKey, Poll, PollConfig, PollId, Vote, PollFeature, POLL_FEATURES, EDITABLE_POLL_PROPS, EditablePollProperty } from './models'
+import { Option, PollOptionKey, Poll, PollConfig, PollId, Vote, PollFeature, POLL_FEATURES_SET, EDITABLE_POLL_PROPS, EditablePollProperty, POLL_FEATURES_ARRAY, POLL_FEATURES } from './models'
 import storage from './storage'
 import { computeResults, resultsSummary } from './voting'
 import { showMatrix } from './voting/condorcet'
 import { L, PREFIX } from './settings'
 import { reverseLookup } from './util/record'
 import { delay } from '@qntnt/ts-utils/lib/promise'
-import { DateTime } from 'luxon'
+import { DateTime, Duration, FixedOffsetZone, LocalZone, Zone } from 'luxon'
+import { reversed } from './util/String'
+import { MessageOptions } from 'child_process'
 
 export const POLLBOT_PREFIX = PREFIX
 export const CREATE_POLL_COMMAND = `${POLLBOT_PREFIX} poll`
@@ -17,6 +19,7 @@ export const AUDIT_POLL_COMMAND = `${POLLBOT_PREFIX} audit`
 export const ADD_POLL_FEATURES_COMMAND = `${POLLBOT_PREFIX} addFeatures`
 export const REMOVE_POLL_FEATURES_COMMAND = `${POLLBOT_PREFIX} removeFeatures`
 export const SET_POLL_PROPERTIES_COMMAND = `${POLLBOT_PREFIX} set`
+export const DELETE_MY_USER_DATA_COMMAND = `${POLLBOT_PREFIX} deleteMyUserData`
 
 export const POLL_ID_PREFIX = 'poll#'
 
@@ -27,6 +30,27 @@ function isTeam(userTeam: User | Team | null | undefined): userTeam is Team {
 
 function isMessage(interaction: Interaction | undefined): interaction is Message {
     return interaction !== undefined && (interaction as Message).content !== undefined
+}
+
+function simpleEmbed(title: string, description?: string) {
+    return new MessageEmbed({
+        title,
+        description,
+    })
+}
+
+function simpleSendable(title: string, description?: string) {
+    return {
+        embeds: [
+            simpleEmbed(title, description)
+        ],
+    }
+}
+
+function embedSendable(embed: MessageEmbed) {
+    return {
+        embeds: [ embed ]
+    }
 }
 
 type Interaction = Message | MessageReaction
@@ -180,14 +204,19 @@ export async function createPoll(ctx: Context, message: Message) {
     }
     const topic = command.substring(0, topicEnd)
     if (topic === '?') {
-        return message.channel.send(`You must specify a topic. Example: \`${CREATE_POLL_COMMAND} What is the best icecream flavor? chocolate, vanilla, mint chip\``)
+        return message.channel.send(simpleSendable(
+            `You must specify a topic.`,
+            `Example: \`${CREATE_POLL_COMMAND} What is the best icecream flavor? chocolate, vanilla, mint chip\``
+        ))
     }
     const optionsList = command.substring(topicEnd, command.length)
         .split(',')
         .map(o => o.trim())
         .filter(o => o !== '')
     if (optionsList.length < 2) {
-        return message.channel.send('You must specify at least two options in a poll.')
+        return message.channel.send(simpleSendable(
+            'You must specify at least two options in a poll.'
+        ))
     }
     const options: Record<PollOptionKey, Option> = {}
     optionsList.forEach((o, i) => {
@@ -205,7 +234,9 @@ export async function createPoll(ctx: Context, message: Message) {
     }
     const poll = await storage.createPoll(pollConfig)
     if (!poll) {
-        return await message.channel.send('I couldn\'t make this poll. Something went wrong.')
+        return await message.channel.send(simpleSendable(
+            'I couldn\'t make this poll. Something went wrong.'
+        ))
     }
     const closesAt = moment(poll.closesAt).tz('America/Los_Angeles').format('dddd, MMMM Do YYYY, h:mm zz')
     const optionText = Object.values(poll?.options).map(o => `\`${o}\``).join(', ')
@@ -222,14 +253,16 @@ export async function createPoll(ctx: Context, message: Message) {
 }
 
 async function createPollHelp(message: Message) {
+
     return await message.channel.send(
-        `Create polls with this command format:\n` +
-        `\`${CREATE_POLL_COMMAND} <topic>? <comma-separated options>\`\n\n` +
-        `Example:\n` +
-        `\`${CREATE_POLL_COMMAND} Best food? pizza, pasta, beets\``
+        embedSendable(
+            simpleEmbed(
+                `Create polls with this command format`,
+                `\`${CREATE_POLL_COMMAND} <topic>? <comma-separated options>\``
+            ).addField('Example', `\`${CREATE_POLL_COMMAND} Best food? pizza, pasta, beets\``)
+        )
     )
 }
-
 
 export async function setPollProperties(ctx: Context, message: Message) {
     const content = message.content.substring(
@@ -239,17 +272,17 @@ export async function setPollProperties(ctx: Context, message: Message) {
     L.d(content)
     const pollId = content.substring(0, content.indexOf(' '))
     if (pollId === '') {
-        return await addPollFeatureslHelp(ctx, message)
+        return await setPollPropertiesHelp(ctx, message)
     }
     const poll = await storage.getPoll(pollId)
     if (!poll) {
-        return await message.channel.send(`I couldn't find poll ${pollId}`)
+        return await message.channel.send(simpleSendable(`I couldn't find poll ${pollId}`))
     }
 
     try {
         await ctx.checkPermissions(['botOwner', 'guildAdmin', 'pollOwner'], poll)
     } catch {
-        return await message.channel.send(`You don't have permission to edit this poll`)
+        return await message.channel.send(simpleSendable(`You don't have permission to edit this poll`))
     }
 
     const propertySetters = content.substring(pollId.length, content.length)
@@ -288,15 +321,30 @@ export async function setPollProperties(ctx: Context, message: Message) {
     })
 }
 
-async function setPollPropertiesHelp(message: Message) {
-    return await message.channel.send(
-        `Create polls with this command format:\n` +
-        `\`${CREATE_POLL_COMMAND} <topic>? <comma-separated options>\`\n\n` +
-        `Example:\n` +
-        `\`${CREATE_POLL_COMMAND} Best food? pizza, pasta, beets\``
+async function setPollPropertiesHelp(ctx: Context, message: Message) {
+    const closesAt = DateTime.now()
+        .plus({ days: 5 })
+        .setZone('UTC+5')
+        .set({
+            minute: 0,
+            second: 0,
+            millisecond: 0
+        })
+    const exampleDate = closesAt.toISO({suppressSeconds: true, suppressMilliseconds: true})
+    const embed = simpleEmbed(
+        `Set poll properties with this command format`,
+        `\`${SET_POLL_PROPERTIES_COMMAND} <pollId> <prop1>=<propValue1> | <prop2>=<propValue2> | <...>\``
     )
+        .addField('Example', `\`${SET_POLL_PROPERTIES_COMMAND} 1234 closesAt=${exampleDate} | topic=New Topic\``)
+        .addField(
+            'Properties', 
+            '`closesAt` - The closing date-time of the poll. When setting this, be sure to specify your date in ISO format with a timezone offset.\n'
+            + '`topic` - The topic of the poll. Only update this when initially configuring your poll. _If you update this after receiving ballots, the users who submitted ballots should request new ballots by reacting to the poll message and resubmit their votes._'
+        )
+    return await message.channel.send({
+        embeds: [ embed ]
+    })
 }
-
 
 export async function addPollFeatures(ctx: Context, message: Message) {
     const [pollId, ...features] = message.content.substring(
@@ -304,20 +352,20 @@ export async function addPollFeatures(ctx: Context, message: Message) {
         message.content.length
     ).trim().split(new RegExp('\\s'))
     if (pollId === '') {
-        return await addPollFeatureslHelp(ctx, message)
+        return await addPollFeaturesHelp(ctx, message)
     }
     const poll = await storage.getPoll(pollId)
     if (!poll) {
-        return await message.channel.send(`I couldn't find poll ${pollId}`)
+        return await message.channel.send(simpleSendable(`I couldn't find poll ${pollId}`))
     }
 
     try {
         await ctx.checkPermissions(['botOwner', 'guildAdmin', 'pollOwner'], poll)
     } catch {
-        return await message.channel.send(`You don't have permission to edit this poll`)
+        return await message.channel.send(simpleSendable(`You don't have permission to edit this poll`))
     }
 
-    const validatedFeatures = features.filter(feature => (POLL_FEATURES as Set<string>).has(feature)) as PollFeature[]
+    const validatedFeatures = features.filter(feature => (POLL_FEATURES_SET as Set<string>).has(feature)) as PollFeature[]
     const pollFeatures = new Set(poll.features ?? [])
     for (const feature of validatedFeatures) {
         pollFeatures.add(feature)
@@ -336,14 +384,21 @@ export async function addPollFeatures(ctx: Context, message: Message) {
     })
 }
 
-async function addPollFeatureslHelp(ctx: Context, message: Message) {
+function describeFeatures(features: PollFeature[]): string {
+    return features.map(f => `\`${f}\` - ${POLL_FEATURES[f].description}`).join('\n')
+}
+
+async function addPollFeaturesHelp(ctx: Context, message: Message) {
     const exampleFeature: PollFeature = 'disableRandomizedBallots'
-    return await message.channel.send(
-        `Add poll features with this command format:\n` +
-        `\`${ADD_POLL_FEATURES_COMMAND} <pollId> <feature1> <feature2> <...>\`\n\n` +
-        `Example:\n` +
-        `\`${ADD_POLL_FEATURES_COMMAND} 1234 ${exampleFeature}\``
+    const embed = simpleEmbed(
+        `Add poll features with this command format`,
+        `\`${ADD_POLL_FEATURES_COMMAND} <pollId> <feature1> <feature2> <...>\``
     )
+        .addField('Example', `\`${ADD_POLL_FEATURES_COMMAND} 1234 ${exampleFeature}\``)
+        .addField('Features', describeFeatures(POLL_FEATURES_ARRAY))
+    return await message.channel.send({
+        embeds: [ embed ]
+    })
 }
 
 export async function removePollFeatures(ctx: Context, message: Message) {
@@ -352,20 +407,20 @@ export async function removePollFeatures(ctx: Context, message: Message) {
         message.content.length
     ).trim().split(new RegExp('\\s'))
     if (pollId === '') {
-        return await removePollFeatureslHelp(ctx, message)
+        return await removePollFeaturesHelp(ctx, message)
     }
     const poll = await storage.getPoll(pollId)
     if (!poll) {
-        return await message.channel.send(`I couldn't find poll ${pollId}`)
+        return await message.channel.send(simpleSendable(`I couldn't find poll ${pollId}`))
     }
 
     try {
         await ctx.checkPermissions(['botOwner', 'guildAdmin', 'pollOwner'], poll)
     } catch {
-        return await message.channel.send(`You don't have permission to edit this poll`)
+        return await message.channel.send(simpleSendable(`You don't have permission to edit this poll`))
     }
 
-    const validatedFeatures = features.filter(feature => (POLL_FEATURES as Set<string>).has(feature)) as PollFeature[]
+    const validatedFeatures = features.filter(feature => (POLL_FEATURES_SET as Set<string>).has(feature)) as PollFeature[]
     const pollFeatures = new Set(poll.features ?? [])
     for (const feature of validatedFeatures) {
         pollFeatures.delete(feature)
@@ -384,14 +439,16 @@ export async function removePollFeatures(ctx: Context, message: Message) {
     })
 }
 
-async function removePollFeatureslHelp(ctx: Context, message: Message) {
+async function removePollFeaturesHelp(ctx: Context, message: Message) {
     const exampleFeature: PollFeature = 'disableRandomizedBallots'
-    return await message.channel.send(
-        `Add poll features with this command format:\n` +
-        `\`${ADD_POLL_FEATURES_COMMAND} <pollId> <feature1> <feature2> <...>\`\n\n` +
-        `Example:\n` +
-        `\`${ADD_POLL_FEATURES_COMMAND} 1234 ${exampleFeature}\``
-    )
+    return await message.channel.send(embedSendable(
+        simpleEmbed(
+            `Remove poll features with this command format`,
+            `\`${REMOVE_POLL_FEATURES_COMMAND} <pollId> <feature1> <feature2> <...>\``
+        )
+            .addField('Example', `\`${REMOVE_POLL_FEATURES_COMMAND} 1234 ${exampleFeature}\``)
+            .addField('Features', describeFeatures(POLL_FEATURES_ARRAY))
+    ))
 }
 
 export async function closePoll(ctx: Context,  message: Message) {
@@ -404,13 +461,13 @@ export async function closePoll(ctx: Context,  message: Message) {
     }
     const poll = await storage.getPoll(pollId)
     if (!poll) {
-        return await message.channel.send(`I couldn't find poll ${pollId}`)
+        return await message.channel.send(simpleSendable(`I couldn't find poll ${pollId}`))
     }
 
     try {
         await ctx.checkPermissions(['botOwner', 'guildAdmin', 'pollOwner'], poll)
     } catch {
-        return await message.channel.send(`You don't have permission to close this poll`)
+        return await message.channel.send(simpleSendable(`You don't have permission to close this poll`))
     }
     // Update poll closing time in background
     storage.updatePoll(poll.id, {
@@ -427,7 +484,9 @@ export async function closePoll(ctx: Context,  message: Message) {
         const ballots = await storage.listBallots(poll.id)
         const results = computeResults(poll, ballots)
         if (!results) {
-            return await message.channel.send('There was an issue tabulating results')
+            return await message.channel.send(simpleSendable(
+                'There was an issue tabulating results'
+            ))
         }
         const summary = resultsSummary(poll, results)
         summary.setTitle(`${POLL_ID_PREFIX}${poll.id} is now closed.`)
@@ -440,7 +499,12 @@ export async function closePoll(ctx: Context,  message: Message) {
 }
 
 async function closePollHelp(message: Message) {
-    return await message.channel.send(`Close polls with this command format:\n\`${CLOSE_POLL_COMMAND} <pollId>\``)
+    const embed = simpleEmbed(
+        `Close polls with this command format`,
+        `\`${CLOSE_POLL_COMMAND} <pollId>\`\n\n`
+    )
+        .addField('Example', `\`${CLOSE_POLL_COMMAND} 1234\``)
+    return await message.channel.send(embedSendable(embed))
 }
 
 export async function pollResults(ctx: Context, message: Message) {
@@ -455,7 +519,7 @@ export async function pollResults(ctx: Context, message: Message) {
 
     const poll = await storage.getPoll(pollId)
     if (!poll) {
-        return await message.channel.send(`Poll ${pollId} not found.`)
+        return await message.channel.send(simpleSendable(`Poll ${pollId} not found.`))
     }
     try {
         ctx.checkPermissions([
@@ -465,12 +529,14 @@ export async function pollResults(ctx: Context, message: Message) {
             'guildAdmin',
         ], poll)
     } catch {
-        return await message.channel.send(`You can't view results for poll ${pollId} in this channel.`)
+        return await message.channel.send(simpleSendable(`You can't view results for poll ${pollId} in this channel.`))
     }
     const ballots = await storage.listBallots(poll.id)
     const results = computeResults(poll, ballots)
     if (!results) {
-        return await message.channel.send('There are no results yet')
+        return await message.channel.send(simpleSendable(
+            'There are no results yet'
+        ))
     }
 
     const summary = resultsSummary(poll, results)
@@ -480,7 +546,12 @@ export async function pollResults(ctx: Context, message: Message) {
 }
 
 async function pollResultsHelp(message: Message) {
-    return await message.channel.send(`View poll results with this command format:\n\`${POLL_RESULTS_COMMAND} <pollId>\``)
+    const embed = simpleEmbed(
+        `View poll results with this command format`,
+        `\`${POLL_RESULTS_COMMAND} <pollId>\``
+    )
+        .addField('Example', `\`${POLL_RESULTS_COMMAND} 1234\``)
+    return await message.channel.send(embedSendable(embed))
 }
 
 const POLL_EXPR = new RegExp(`^>?\\s?${POLL_ID_PREFIX}(.+)`)
@@ -502,10 +573,16 @@ export async function createBallot(ctx: Context, reaction: MessageReaction, user
     const pollId = findPollId(reaction.message)
     if (!pollId) {
         L.d(`Couldn't find poll for new ballot: ${reaction.message.content?.substring(0, POLL_ID_PREFIX.length)}`)
-        return await user.send('There was an issue creating your ballot. Couldn\'t parse pollId')
+        return await user.send(simpleSendable(
+            'There was an issue creating your ballot',
+            'Couldn\'t parse pollId'
+        ))
     }
     const poll = await storage.getPoll(pollId)
-    if (!poll) return await user.send('There was an issue creating your ballot. Couldn\'t find the poll')
+    if (!poll) return await user.send(simpleSendable(
+        'There was an issue creating your ballot',
+        'Couldn\'t find the poll'
+    ))
     
     let ballot = await storage.findBallot(poll.id, user.id)
     if (!ballot) {
@@ -517,7 +594,9 @@ export async function createBallot(ctx: Context, reaction: MessageReaction, user
     }
 
     if (!ballot) {
-        return await user.send('There was an issue creating your ballot.')
+        return await user.send(simpleSendable(
+            'There was an issue creating your ballot.'
+        ))
     }
 
     let optionText = ''
@@ -552,31 +631,35 @@ export async function submitBallot(ctx: Context,  message: Message) {
     const history = await message.channel.messages.fetch({ limit })
     const lastBallotText = history.find(m => findPollId(m) !== undefined)
     if (!lastBallotText) {
-        return await message.channel.send(`Could not find a pollId in the last ${limit} messages`)
+        return await message.channel.send(simpleSendable(
+            `Could not find a pollId in the last ${limit} messages`
+        ))
     }
 
     const messageContent = message.content.toLowerCase()
     if (messageContent.startsWith(POLLBOT_PREFIX)) {
-        return await message.channel.send('DMs are for submitting ballots. Manage polls in public channels.')
+        return await message.channel.send(simpleSendable(
+            'DMs are for submitting ballots. Manage polls in public channels.'
+        ))
     }
 
     const pollId = findPollId(lastBallotText)
     if (!pollId) {
-        return await message.channel.send(`Could not find a pollId in the last ${limit} messages`)
+        return await message.channel.send(simpleSendable(`Could not find a pollId in the last ${limit} messages`))
     }
 
     const poll = await storage.getPoll(pollId)
     if (!poll) {
-        return await message.channel.send(`Could not find a poll with id ${pollId}`)
+        return await message.channel.send(simpleSendable(`Could not find a poll with id ${pollId}`))
     }
 
     if (poll.closesAt < moment().toDate()) {
-        return await message.channel.send(`Poll ${poll.id} is closed.`)
+        return await message.channel.send(simpleSendable(`Poll ${poll.id} is closed.`))
     }
 
     const ballot = await storage.findBallot(pollId, message.author.id)
     if (!ballot) {
-        return await message.channel.send(`I couldn't find a ballot for you on poll ${pollId}`)
+        return await message.channel.send(simpleSendable(`I couldn't find a ballot for you on poll ${pollId}`))
     }
 
     const validOptionKeys = Object.keys(poll.options).sort()
@@ -613,7 +696,9 @@ export async function submitBallot(ctx: Context,  message: Message) {
         votes,
     })
     if (!updatedBallot) {
-        return await message.channel.send('There was a problem recording your ballot.')
+        return await message.channel.send(simpleSendable(
+            'There was a problem recording your ballot.'
+        ))
     }
 
     let summaryLines = []
@@ -641,7 +726,34 @@ export async function submitBallot(ctx: Context,  message: Message) {
 }
 
 export async function help(ctx: Context,  message: Message) {
-    message.channel.send('Commands: `poll`, `close`, `results`, `audit`')
+    message.channel.send({
+        embeds: [
+            new MessageEmbed({
+                title: 'Pollbot help',
+                description: `Type \`${POLLBOT_PREFIX} <command>\` to see detailed help information for each command.`
+            })
+                .addField('Example', `\`${CREATE_POLL_COMMAND}\` will give you information about how to create a poll.`)
+                .addField(
+                    'General Commands', 
+                    '`poll` - Create a poll\n'
+                    + '`results` - View current poll results\n'
+                    + '`help` - View this help information'
+                )
+                .addField(
+                    'Restricted Commands', 
+                    '_These are privileged commands for poll owners, admins, and bot owners_\n'
+                    + '`close` - Close a poll\n'
+                    + '`audit` - Audit poll result and receive ballot information\n'
+                    + '`set` - Update poll properties like the closing time and topic\n'
+                    + '`addFeatures` - Add features to a poll\n'
+                    + '`removeFeatures` - Remove features from a poll'
+                )
+                .addField(
+                    'Destructive Commands',
+                    '`deleteMyUserData` - Deletes **all** of your polls and ballots. This will affect polls that you\'ve voted on.'
+                )
+        ]
+    })
 }
 
 function toCSVRow(columns: string[], record: Record<string, string | number | undefined>): string {
@@ -686,23 +798,26 @@ export async function auditPoll(ctx: Context, message: Message) {
 
     const poll = await storage.getPoll(pollId)
     if (!poll) {
-        return message.channel.send(`Poll ${pollId} not found.`)
+        return message.channel.send(simpleSendable(`Poll ${pollId} not found.`))
     }
     if (!belongsToGuild(ctx, poll, message)) {
-        return message.channel.send(`Poll ${pollId} does not belong to this server.`)
+        return message.channel.send(simpleSendable(`Poll ${pollId} does not belong to this server.`))
     }
 
     try {
         await ctx.checkPermissions(['botOwner', 'guildAdmin'], poll)
     } catch {
-        return message.channel.send(`You are not an admin for this bot instance. Only admins may audit poll results and export ballot data.`)
+        return message.channel.send(simpleSendable(
+            `You are not an admin for this bot instance.`, 
+            `Only admins may audit poll results and export ballot data.`
+        ))
     }
 
     const ballots = await storage.listBallots(poll.id)
 
     const results = computeResults(poll, ballots)
     if (!results) {
-        return message.channel.send(`There was an issue computing results`)
+        return message.channel.send(simpleSendable(`There was an issue computing results`))
     }
     const summary = resultsSummary(poll, results)
     const matrixSummary = showMatrix(results.matrix)
@@ -720,7 +835,9 @@ export async function auditPoll(ctx: Context, message: Message) {
             embeds: [matrixEmbed]
         })
     } else {
-        await message.channel.send('Your poll has too many options to render a pairwise comparison matrix.')
+        await message.channel.send(simpleSendable(
+            'Your poll has too many options to render a pairwise comparison matrix.'
+        ))
     }
 
     const options = Object.values(poll.options).sort()
@@ -743,6 +860,7 @@ export async function auditPoll(ctx: Context, message: Message) {
     const attachment = new MessageAttachment(csvBuffer, `poll_${poll.id}_votes.csv`)
 
     await message.author.send({
+        
         embeds: [new MessageEmbed({ description: `Here's a file containing all ballot data for \`${POLL_ID_PREFIX}${poll.id}\``})],
         files: [attachment]
     })
@@ -756,5 +874,93 @@ export async function auditPoll(ctx: Context, message: Message) {
 }
 
 async function auditPollHelp(message: Message) {
-    return await message.channel.send(`Audit poll results with this command format:\n\`${AUDIT_POLL_COMMAND} <pollId>\``)
+    const embed = simpleEmbed(
+        `Audit poll results with this command format`,
+        `\`${AUDIT_POLL_COMMAND} <pollId>\``
+    )
+        .addField('Example', `\`${AUDIT_POLL_COMMAND} 1234\``)
+    return await message.channel.send(embedSendable(embed))
+}
+
+export const DELETE_USER_DATA_CONFIRM_TITLE = `Are you sure you want to delete all of your Pollbot data?`
+const CONFIRM_EMOJI = '✅'
+const CANCEL_EMOJI = '🚫'
+
+export async function deleteMyUserData(ctx: Context, message: Message) {
+    const userToDelete = message.author
+    const userMetrics = await storage.getUserDataMetrics(userToDelete.id)
+    const embed = new MessageEmbed({
+        color: 'RED',
+        title: DELETE_USER_DATA_CONFIRM_TITLE,
+        footer: {
+            iconURL: userToDelete.avatarURL() ?? userToDelete.defaultAvatarURL,
+            text: `${userToDelete.username} - ${userToDelete.id}`,
+        },
+    })
+        .addField(`Metrics`, `**${userMetrics.numPolls} polls will be deleted.**\n**${userMetrics.numBallots} ballots will be deleted.** This may effect newly computed poll results for previously completed polls.`)
+        .addField('Warning', '**This operation cannot be reversed or undone.**')
+        .addField('Instructions', `Press ${CONFIRM_EMOJI} to confirm and delete your data. Press ${CANCEL_EMOJI} to cancel.`)
+    
+    const confirmMsg = await message.channel.send({
+        embeds: [embed]
+    })
+    await confirmMsg.react(CONFIRM_EMOJI)
+    await confirmMsg.react(CANCEL_EMOJI)
+}
+
+export async function deleteMyUserDataConfirm(ctx: Context, reaction: MessageReaction, user: AnyUser) {
+    const footerText = reaction.message.embeds[0]?.footer?.text
+    if (footerText === undefined) return
+    const reversedFooterText = reversed(footerText)
+    const reversedId = reversedFooterText.substring(0, reversedFooterText.indexOf('-')).trim()
+    const userId = reversed(reversedId)
+    if (user.id !== userId) {
+        return
+    }
+
+    switch (reaction.emoji.name) {
+        case CONFIRM_EMOJI: {
+            try {
+                const message = await reaction.message.edit({
+                    embeds: [
+                        new MessageEmbed({
+                            color: 'RED',
+                            description: 'Deleting your data...'
+                        })
+                    ]
+                })
+                const metrics = await storage.deleteUserData(userId)
+                await message.edit({
+                    embeds: [
+                        new MessageEmbed({
+                            color: 'RED',
+                            description: `${metrics.numPolls} polls and ${metrics.numBallots} ballots were deleted.`
+                        })
+                    ]
+                })
+            } catch(e) {
+                await reaction.message.channel.send({
+                    embeds: [
+                        new MessageEmbed({
+                            color: 'RED',
+                            description: 'There was an issue while deleting your data. Please contact Pollbot support.'
+                        })
+                    ]
+                })
+            }
+            return
+        }
+        case CANCEL_EMOJI: {
+            await reaction.message.edit({
+                embeds: [
+                    new MessageEmbed({
+                        color: 'RED',
+                        title: 'Operation canceled.',
+                    })
+                ]
+            })
+            await reaction.message.reactions.removeAll()
+            return
+        }
+    }
 }
