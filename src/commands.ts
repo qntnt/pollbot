@@ -741,8 +741,10 @@ export async function auditPoll(ctx: Context, message: Message) {
     }))
     const csvBuffer = Buffer.from(csvText)
     const attachment = new MessageAttachment(csvBuffer, `poll_${poll.id}_votes.csv`)
+
     await message.author.send({
-        embeds: [attachment]
+        embeds: [new MessageEmbed({ description: `Here's a file containing all ballot data for \`${POLL_ID_PREFIX}${poll.id}\``})],
+        files: [attachment]
     })
     await message.channel.send({
         embeds: [
