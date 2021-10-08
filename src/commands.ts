@@ -1,4 +1,4 @@
-import { Client, ClientApplication, GuildMember, Message, MessageAttachment, MessageEmbed, MessagePayload, MessageReaction, PartialMessage, PartialUser, Team, TeamMember, User } from 'discord.js'
+import { Client, ClientApplication, GuildMember, Message, MessageAttachment, MessageEmbed, MessageReaction, PartialMessage, PartialUser, Team, TeamMember, User } from 'discord.js'
 import moment from 'moment-timezone'
 import { Option, PollOptionKey, Poll, PollConfig, PollId, Vote, PollFeature, POLL_FEATURES_SET, EDITABLE_POLL_PROPS, EditablePollProperty, POLL_FEATURES_ARRAY, POLL_FEATURES } from './models'
 import storage from './storage'
@@ -7,9 +7,8 @@ import { showMatrix } from './voting/condorcet'
 import { L, PREFIX } from './settings'
 import { reverseLookup } from './util/record'
 import { delay } from '@qntnt/ts-utils/lib/promise'
-import { DateTime, Duration, FixedOffsetZone, LocalZone, Zone } from 'luxon'
+import { DateTime } from 'luxon'
 import { reversed } from './util/String'
-import { MessageOptions } from 'child_process'
 
 export const POLLBOT_PREFIX = PREFIX
 export const CREATE_POLL_COMMAND = `${POLLBOT_PREFIX} poll`
