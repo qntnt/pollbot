@@ -24,7 +24,8 @@
         "dev": "ts-node-dev src/index.ts --watch",
         "devProd": "NODE_ENV=production ts-node-dev src/index.ts --watch",
         "devStaging": "NODE_ENV=staging ts-node-dev src/index.ts --watch",
-        "test": "jest"
+        "test": "jest",
+        "start": "node build/index.js"
     },
     "dependencies": {
         "@qntnt/ts-utils": "^1.0.0",

@@ -104,25 +104,45 @@ client.on('message', async message => {
 },)
 
 client.on('raw', async packet => {
-    if (!['MESSAGE_REACTION_ADD'].includes(packet.t)) return
-    // Grab the channel to check the message from
-    const channel = (await client.channels.fetch(packet.d.channel_id)) as Discord.TextChannel
-    // There's no need to emit if the message is cached, because the event will fire anyway for that
-    if (channel.messages.cache.has(packet.d.message_id)) return
-    // Since we have confirmed the message is not cached, let's fetch it
-    const message = await channel.messages.fetch(packet.d.message_id)
-    // Emojis can have identifiers of name:id format, so we have to account for that case as well
-    const emoji = packet.d.emoji.id ? `${packet.d.emoji.name}:${packet.d.emoji.id}` : packet.d.emoji.name
-    // This gives us the reaction we need to emit the event properly, in top of the message object
-    const reaction = message.reactions.resolve(emoji)
-    if (!reaction) return
-    const user = await client.users.fetch(packet.d.user_id)
-    // Adds the currently reacting user to the reaction's users collection.
-    reaction.users.cache.set(packet.d.user_id, user)
-    reaction.message = message
-    // Check which type of event it is before emitting
-    if (packet.t === 'MESSAGE_REACTION_ADD') {
-        client.emit('messageReactionAdd', reaction, user)
+    try {
+        if (!['MESSAGE_REACTION_ADD'].includes(packet.t)) return
+        if (!client.user?.id) {
+            return
+        }
+        // DO NOT HANDLE POLLBOT REACTIONS
+        if (packet.d.user_id === client.user.id) {
+            return
+        }
+        // Grab the channel to check the message from
+        const cachedChannel = client.channels.cache.get(packet.d.channel_id)
+        const channel = (cachedChannel ? cachedChannel : (await client.channels.fetch(packet.d.channel_id))) as Discord.TextChannel
+        // There's no need to emit if the message is cached, because the event will fire anyway for that
+        if (channel.messages.cache.has(packet.d.message_id)) return
+        // Since we have confirmed the message is not cached, let's fetch it
+        let message
+        try {
+            message = await channel.messages.fetch(packet.d.message_id)
+        } catch (e: any) {
+            L.d(e)
+            return
+        }
+        // Emojis can have identifiers of name:id format, so we have to account for that case as well
+        const emoji = packet.d.emoji.id ? `${packet.d.emoji.name}:${packet.d.emoji.id}` : packet.d.emoji.name
+        // This gives us the reaction we need to emit the event properly, in top of the message object
+        const reaction = message.reactions.resolve(emoji)
+        if (!reaction) return
+        const cachedUser = client.users.cache.get(packet.d.user_id)
+        const user = cachedUser ? cachedUser : await client.users.fetch(packet.d.user_id)
+        // Adds the currently reacting user to the reaction's users collection.
+        reaction.users.cache.set(packet.d.user_id, user)
+        reaction.message = message
+        // Check which type of event it is before emitting
+        if (packet.t === 'MESSAGE_REACTION_ADD') {
+            client.emit('messageReactionAdd', reaction, user)
+        }
+    } catch (e: any) {
+        L.d('Error in raw reaction add')
+        L.d(e)
     }
 })
 
