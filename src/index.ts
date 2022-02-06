@@ -130,35 +130,35 @@ client.on('message', async message => {
             return
         }
         if (isCommand(message, commands.CREATE_POLL_COMMAND)) {
-            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll create`')
+            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll create`. If slash commands aren\'t available, have a server admin re-invite pollbot to your server.')
             return
         }
         if (isCommand(message, commands.CLOSE_POLL_COMMAND)) {
-            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll close`')
+            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll close`. If slash commands aren\'t available, have a server admin re-invite pollbot to your server.')
             return
         }
         if (isCommand(message, commands.POLL_RESULTS_COMMAND)) {
-            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll results`')
+            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll results`. If slash commands aren\'t available, have a server admin re-invite pollbot to your server.')
             return
         }
         if (isCommand(message, commands.AUDIT_POLL_COMMAND)) {
-            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll audit`')
+            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll audit`. If slash commands aren\'t available, have a server admin re-invite pollbot to your server.')
             return
         }
         if (isCommand(message, commands.SET_POLL_PROPERTIES_COMMAND)) {
-            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll update`')
+            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll update`. If slash commands aren\'t available, have a server admin re-invite pollbot to your server.')
             return
         }
         if (isCommand(message, commands.ADD_POLL_FEATURES_COMMAND)) {
-            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll update`')
+            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll update`. If slash commands aren\'t available, have a server admin re-invite pollbot to your server.')
             return
         }
         if (isCommand(message, commands.REMOVE_POLL_FEATURES_COMMAND)) {
-            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll update`')
+            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll update`. If slash commands aren\'t available, have a server admin re-invite pollbot to your server.')
             return
         }
         if (isCommand(message, commands.DELETE_MY_USER_DATA_COMMAND)) {
-            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/delete_my_user_data`')
+            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/delete_my_user_data`. If slash commands aren\'t available, have a server admin re-invite pollbot to your server.')
             return
         }
         await commands.help(ctx, message)
