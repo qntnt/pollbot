@@ -1,7 +1,9 @@
 import * as Discord from 'discord.js'
 import { DISCORD_TOKEN, L } from './settings'
 import * as commands from './commands'
+import { Context } from "./Context"
 import storage from './storage'
+import { registerCommands } from './slashCommands'
 
 const client = new Discord.Client({
     intents: [
@@ -12,8 +14,10 @@ const client = new Discord.Client({
         'GUILD_MESSAGE_REACTIONS',
     ]
 })
-const context = new commands.Context(client)
+const context = new Context(client)
 context.init()
+
+registerCommands()
 
 client.once('ready', async () => {
     console.log(`Logged in as ${client.user?.tag ?? 'undefined'}`)
@@ -46,6 +50,68 @@ function isCommand(message: Discord.Message, command: string): boolean {
     return message.content.toLowerCase().startsWith(command.toLowerCase())
 }
 
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isCommand()) return
+    const ctx = context.withCommandInteraction(interaction)
+    try {
+        switch (interaction.commandName) {
+            case 'poll':
+                await pollCommand(ctx)
+                break
+            case 'unsafe_delete_my_user_data':
+                const user = interaction.options.getUser('confirm_user', true)
+                await commands.deleteMyUserData(ctx, user)
+                break
+        }
+    } catch (e) {
+        console.error(e)
+        const msg = {
+            embeds: [
+                new Discord.MessageEmbed({
+                    color: 'RED',
+                    description: 'There was an unknown error with your command. Sorry about that. Please reach out to [Pollbot support](https://discord.gg/uC2rkUyDdE) if there are further problems',
+                })
+            ],
+            ephemeral: true,
+        }
+        await ctx.followUp(msg)
+    }
+})
+
+async function pollCommand(ctx: Context<Discord.CommandInteraction>) {
+    const interaction = ctx.interaction
+    const subcommand = interaction.options.getSubcommand()
+    if (subcommand === 'create') {
+        const topic = interaction.options.getString('topic', true)
+        const optionsString = interaction.options.getString('options', true)
+        const randomizedBallots = interaction.options.getBoolean('randomized_ballots') ?? true
+        const anytimeResults = interaction.options.getBoolean('anytime_results') ?? true
+        if (interaction.channel?.type !== 'GUILD_TEXT') return
+        await commands.createPoll(ctx, topic, optionsString, randomizedBallots, anytimeResults)
+    } 
+    else if (subcommand === 'close') {
+        const pollId = interaction.options.getString('poll_id', true)
+        await commands.closePoll(ctx, pollId)
+    } 
+    else if (subcommand === 'results') {
+        const pollId = interaction.options.getString('poll_id', true)
+        const _private = interaction.options.getBoolean('private') ?? false
+        await commands.pollResults(ctx, pollId, _private)
+    } 
+    else if (subcommand === 'audit') {
+        const pollId = interaction.options.getString('poll_id', true)
+        await commands.auditPoll(ctx, pollId)
+    } 
+    else if (subcommand === 'update') {
+        const pollId = interaction.options.getString('poll_id', true)
+        const topic = interaction.options.getString('topic') ?? undefined
+        const closesAt = interaction.options.getString('closes_at') ?? undefined
+        const randomizedBallots = interaction.options.getBoolean('randomized_ballots') ?? undefined
+        const anytimeResults = interaction.options.getBoolean('anytime_results') ?? true
+        await commands.updatePoll(ctx, pollId, topic, closesAt, randomizedBallots, anytimeResults)
+    }
+}
+
 client.on('message', async message => {
     try {
         const ctx = context.withMessage(message)
@@ -64,44 +130,44 @@ client.on('message', async message => {
             return
         }
         if (isCommand(message, commands.CREATE_POLL_COMMAND)) {
-            await commands.createPoll(ctx, message)
+            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll create`')
             return
         }
         if (isCommand(message, commands.CLOSE_POLL_COMMAND)) {
-            await commands.closePoll(ctx, message)
+            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll close`')
             return
         }
         if (isCommand(message, commands.POLL_RESULTS_COMMAND)) {
-            await commands.pollResults(ctx, message)
+            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll results`')
             return
         }
         if (isCommand(message, commands.AUDIT_POLL_COMMAND)) {
-            await commands.auditPoll(ctx, message)
+            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll audit`')
             return
         }
         if (isCommand(message, commands.SET_POLL_PROPERTIES_COMMAND)) {
-            await commands.setPollProperties(ctx, message)
+            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll update`')
             return
         }
         if (isCommand(message, commands.ADD_POLL_FEATURES_COMMAND)) {
-            await commands.addPollFeatures(ctx, message)
+            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll update`')
             return
         }
         if (isCommand(message, commands.REMOVE_POLL_FEATURES_COMMAND)) {
-            await commands.removePollFeatures(ctx, message)
+            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll update`')
             return
         }
         if (isCommand(message, commands.DELETE_MY_USER_DATA_COMMAND)) {
-            await commands.deleteMyUserData(ctx, message)
+            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/delete_my_user_data`')
             return
         }
         await commands.help(ctx, message)
         return
-    } catch(e) {
+    } catch (e) {
         console.error(e)
         await message.channel.send('There was an unknown error with your command. Sorry about that.')
     }
-},)
+})
 
 client.on('raw', async packet => {
     try {
@@ -147,7 +213,7 @@ client.on('raw', async packet => {
 })
 
 client.on('messageReactionAdd', async (reaction, user) => {
-    const ctx = context.withMessageReaction(reaction as Discord.MessageReaction, user)
+    const ctx = context.withMessageReaction(reaction as Discord.MessageReaction, user as Discord.User)
     try {
         if (!client.user?.id) {
             return
@@ -167,10 +233,6 @@ client.on('messageReactionAdd', async (reaction, user) => {
         if (reaction.message.embeds[0]?.title?.startsWith(commands.POLL_ID_PREFIX) === true) {
             L.d('Creating ballot...')
             await commands.createBallot(ctx, reaction as Discord.MessageReaction, user)
-            return
-        }
-        if (reaction.message.embeds[0]?.title === commands.DELETE_USER_DATA_CONFIRM_TITLE) {
-            await commands.deleteMyUserDataConfirm(ctx, reaction as Discord.MessageReaction, user)
             return
         }
         L.d(`Couldn't find poll from reaction: ${reaction.emoji} on message ${reaction.message.id}...`)

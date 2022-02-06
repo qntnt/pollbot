@@ -40,12 +40,16 @@ export interface PollConfig {
     ownerId: UserId,
     topic: string,
     options: Record<PollOptionKey, Option>,
+    features: PollFeature[]
 }
 
 export const POLL_FEATURES = {
     disableRandomizedBallots: {
         description: 'Disables randomized ballot option ordering',
     },
+    disableAnytimeResults: {
+        description: 'Disallows users to view results before the poll is closed'
+    }
 }
 
 export type PollFeature = keyof (typeof POLL_FEATURES)
@@ -54,6 +58,10 @@ export const POLL_FEATURES_ARRAY = Object.keys(POLL_FEATURES) as PollFeature[]
 
 export const POLL_FEATURES_SET = new Set(POLL_FEATURES_ARRAY)
 
+export interface MessageRef {
+    id: string,
+    channelId: string,
+}
 
 export interface Poll {
     id: PollId
@@ -65,6 +73,7 @@ export interface Poll {
     options: Record<PollOptionKey, Option>
     ballots: Record<UserId, Ballot>
     features?: PollFeature[]
+    messageRef?: MessageRef
 }
 
 const editablePollPropNames = 

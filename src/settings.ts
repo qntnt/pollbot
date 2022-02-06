@@ -1,4 +1,11 @@
-export const DISCORD_TOKEN = process.env.DISCORD_TOKEN
+const _DISCORD_TOKEN = process.env.DISCORD_TOKEN 
+if (!_DISCORD_TOKEN) throw new Error('DISCORD_TOKEN environment variable is unset.')
+export const DISCORD_TOKEN = _DISCORD_TOKEN 
+
+const _DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID
+if (!_DISCORD_CLIENT_ID) throw new Error('DISCORD_CLIENT_ID environment variable is unset')
+export const DISCORD_CLIENT_ID = _DISCORD_CLIENT_ID
+
 export const STORAGE_TYPE = 'firestore'
 export const ENV_PREFIXES = {
   'production': '!pollbot',
