@@ -9,6 +9,7 @@ You need to set the following environment variables:
 | Environment Variable             | Description                                      |
 | -                                | -                                                |
 | `DISCORD_TOKEN`                  | Your bot token                                   |
+| `DISCORD_CLIENT_ID`              | Your bot client id                               |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Google credentials for firestore storage backend |
 |                                  |                                                  |
 
