@@ -1,4 +1,4 @@
-import { CacheType, Client, ClientApplication, CommandInteraction, Guild, GuildMember, InteractionDeferReplyOptions, InteractionReplyOptions, Message, MessageEmbed, MessageOptions, MessagePayload, MessageReaction, PartialUser, Team, TeamMember, TextBasedChannel, TextChannel, User, WebhookMessageOptions } from 'discord.js';
+import { ButtonInteraction, CacheType, Client, ClientApplication, CommandInteraction, Guild, GuildMember, InteractionDeferReplyOptions, InteractionReplyOptions, Message, MessageEmbed, MessageOptions, MessagePayload, MessageReaction, PartialUser, Team, TeamMember, TextBasedChannel, TextChannel, User, WebhookMessageOptions } from 'discord.js';
 import { Poll } from './models';
 import { delay } from '@qntnt/ts-utils/lib/promise';
 import { isTeam, PollbotPermission, isGuildMember } from './commands';
@@ -6,7 +6,7 @@ import { APIMessage } from 'discord-api-types';
 import { L } from './settings';
 
 
-export type Interaction = Message | MessageReaction | CommandInteraction
+export type Interaction = Message | MessageReaction | CommandInteraction | ButtonInteraction
 export type InteractionType = 'Message' | 'MessageReaction' | 'CommandInteraction'
 export type AnyUser = User | GuildMember | TeamMember
 export type BotOwner = User | Team
@@ -63,6 +63,19 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
         );
     }
 
+    withButtonInteraction(buttonInteraction: ButtonInteraction): Context<ButtonInteraction, M> {
+        return new Context(
+            this._client,
+            'CommandInteraction',
+            this._application,
+            this._botOwner,
+            buttonInteraction,
+            buttonInteraction.user,
+            this._isInitialized,
+            this._replyMessage,
+        )
+    }
+
     withCommandInteraction(commandInteraction: CommandInteraction): Context<CommandInteraction, M> {
         return new Context(
             this._client,
@@ -73,7 +86,7 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
             commandInteraction.user,
             this._isInitialized,
             this._replyMessage,
-        );
+        )
     }
 
     withMessage(message: Message): Context<Message, M> {
@@ -87,7 +100,7 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
             user,
             this._isInitialized,
             this._replyMessage,
-        );
+        )
     }
 
     withMessageReaction(reaction: MessageReaction, user: AnyUser): Context<MessageReaction, M> {
@@ -100,7 +113,7 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
             user,
             this._isInitialized,
             this._replyMessage,
-        );
+        )
     }
 
     async client(): Promise<Client> {
@@ -351,7 +364,7 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
         return this._type === 'MessageReaction'
     }
 
-    private async resolveMessage( msg: APIMessage | Message): Promise<Message> {
+    public async resolveMessage( msg: APIMessage | Message): Promise<Message> {
         if (isMessage(msg)) {
             return msg
         } else {

@@ -1,4 +1,4 @@
-import { CommandInteraction, GuildMember, Message, MessageAttachment, MessageEditOptions, MessageEmbed, MessageEmbedImage, MessageReaction, PartialMessage, PartialUser, Team, User } from 'discord.js'
+import { ButtonInteraction, CommandInteraction, GuildMember, Message, MessageActionRow, MessageAttachment, MessageButton, MessageEditOptions, MessageEmbed, MessageEmbedImage, MessageReaction, PartialMessage, PartialUser, Team, User } from 'discord.js'
 import moment from 'moment-timezone'
 import { Option, PollOptionKey, Poll, PollConfig, PollId, Vote, PollFeature,  } from './models'
 import storage from './storage'
@@ -96,14 +96,22 @@ export async function createPoll(
     }
     const pollMsgEmbed = createPollEmbed(poll)
     const pollMessage = await ctx.editReply({
-        embeds: [pollMsgEmbed]
+        embeds: [pollMsgEmbed],
+        components: [
+            new MessageActionRow()
+                .addComponents(
+                    new MessageButton()
+                        .setCustomId('request_ballot')
+                        .setLabel('Request Ballot')
+                        .setStyle('PRIMARY')
+                )
+        ]
     })
     poll.messageRef = {
         channelId: pollMessage.channelId,
         id: pollMessage.id
     }
     await storage.updatePoll(poll.id, poll)
-    await pollMessage.react('👋')
 }
 
 function createPollEmbed(poll: Poll): MessageEmbed {
@@ -310,6 +318,78 @@ function findPollId(message: Message | PartialMessage): string | undefined {
     if (pollId) return pollId
     pollId = extractPollId(message.embeds[0]?.title ?? undefined)
     return pollId
+}
+
+export async function createBallotFromButton(ctx: Context<ButtonInteraction>) {
+    const user = ctx.interaction.user
+    const message = await ctx.resolveMessage(ctx.interaction.message)
+    const pollId = findPollId(message)
+    if (!pollId) {
+        L.d(`Couldn't find poll for new ballot: ${message.content?.substring(0, POLL_ID_PREFIX.length)}`)
+        return await user.send(simpleSendable(
+            'There was an issue creating your ballot',
+            'Couldn\'t parse pollId'
+        ))
+    }
+    const poll = await storage.getPoll(pollId)
+    if (!poll) return await user.send(simpleSendable(
+        'There was an issue creating your ballot',
+        'Couldn\'t find the poll'
+    ))
+
+    if (poll.closesAt < moment().toDate()) {
+        return await user.send(simpleSendable(`Poll ${poll.id} is closed.`))
+    }
+
+    let ballot = await storage.findBallot(poll.id, user.id)
+    if (!ballot) {
+        ballot = await storage.createBallot({
+            poll,
+            userId: user.id,
+            userName: user.username ?? '',
+        })
+    }
+
+    if (!ballot) {
+        return await user.send(simpleSendable(
+            'There was an issue creating your ballot.'
+        ))
+    }
+
+    let optionText = ''
+    const disableRandomizedBallots = poll.features?.includes('disableRandomizedBallots') ?? false
+    const ballotOptionMapping = ballot.ballotOptionMapping
+    if (ballotOptionMapping && !disableRandomizedBallots) {
+        optionText = Object.keys(ballotOptionMapping).sort().map(ballotKey => {
+            const pollOptionKey = ballotOptionMapping[ballotKey] ?? ''
+            const pollOption = poll.options[pollOptionKey]
+            return `${ballotKey}| ${pollOption}`
+        }).join('\n')
+    } else {
+        optionText = Object.keys(poll.options).sort().map(key => `${key}| ${poll.options[key]}`).join('\n')
+    }
+    const responseEmbed = new MessageEmbed({
+        title: `${POLL_ID_PREFIX}${poll.id}`,
+        description: `Here's your ballot.`,
+    })
+        .setURL(message.url)
+        .addField('Instructions', 
+            `To vote, order the options from best to worst in a comma-separated list e.g. \`C,b,a,d\`\n` +
+            `_Invalid options will be ignored_\n`)
+        .addField(poll.topic, `\`\`\`\n${optionText}\n\`\`\``)
+        .setFooter(`Privacy notice: Your user id and current user name is linked to your ballot. Your ballot is viewable by you and bot admins.\n\nballot#${ballot.id}`)
+    const dm = await user.send({
+        embeds: [responseEmbed]
+    })
+    await ctx.interaction.reply({
+        embeds: [
+            new MessageEmbed({
+                title: "Here's your new ballot",
+                url: dm.url,
+            })
+        ],
+        ephemeral: true,
+    })
 }
 
 export async function createBallot(ctx: Context<MessageReaction>, reaction: MessageReaction, user: User | PartialUser) {
