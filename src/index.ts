@@ -50,8 +50,7 @@ function isCommand(message: Discord.Message, command: string): boolean {
     return message.content.toLowerCase().startsWith(command.toLowerCase())
 }
 
-client.on('interactionCreate', async interaction => {
-    if (!interaction.isCommand()) return
+async function handleCommandInteraction(interaction: Discord.CommandInteraction) {
     const ctx = context.withCommandInteraction(interaction)
     try {
         switch (interaction.commandName) {
@@ -76,6 +75,20 @@ client.on('interactionCreate', async interaction => {
         }
         await ctx.followUp(msg)
     }
+}
+
+async function handleButtonInteraction(interaction: Discord.ButtonInteraction) {
+    const ctx = context.withButtonInteraction(interaction)
+    switch (interaction.customId) {
+        case 'request_ballot':
+            await commands.createBallotFromButton(ctx)
+            break
+    }
+}
+
+client.on('interactionCreate', async interaction => {
+    if (interaction.isCommand()) return await handleCommandInteraction(interaction)
+    if (interaction.isButton()) return await handleButtonInteraction(interaction)
 })
 
 async function pollCommand(ctx: Context<Discord.CommandInteraction>) {
