@@ -1,0 +1,128 @@
+syntax = "proto3";
+
+package polls;
+
+import "google/protobuf/timestamp.proto";
+import "discord/v1/discord.proto";
+
+
+service PollsService {
+    rpc CreatePoll (CreatePollRequest) returns (CreatePollResponse) {}
+    rpc ReadPoll (ReadPollRequest) returns (ReadPollResponse) {}
+    rpc UpdatePoll (UpdatePollRequest) returns (UpdatePollResponse) {}
+    rpc DeletePoll (DeletePollRequest) returns (DeletePollResponse) {}
+}
+
+message ReadPollRequest {
+    string id = 1;
+}
+
+message ReadPollResponse {
+    polls.PollDTO poll = 1;
+}
+
+message CreatePollRequest {
+    polls.PollRequestDTO poll_request = 1;
+}
+
+message CreatePollResponse {
+    polls.PollDTO poll = 1;
+}
+
+message UpdatePollRequest {
+    polls.PollRequestDTO poll_request = 1;
+}
+
+message UpdatePollResponse {
+    polls.PollDTO poll = 1;
+}
+
+message DeletePollRequest {
+    string poll_id = 1;
+}
+
+message DeletePollResponse {
+    polls.PollDTO poll = 1;
+}
+
+message VoteDTO {
+    string option = 1;
+    optional int32 rank = 2;
+}
+
+message BallotRequestDTO {
+    string poll_id = 1;
+    oneof context {
+        DiscordBallotContextDTO discord = 2;
+        WebBallotContextDTO web = 3;
+    }
+}
+
+message BallotDTO {
+    string id = 1;
+    string poll_id = 2;
+    optional string user_id = 3 [deprecated=true];
+    optional string user_name = 4 [deprecated=true];
+    google.protobuf.Timestamp created_at = 5;
+    google.protobuf.Timestamp updated_at = 6;
+    map<string, VoteDTO> votes = 7;
+    map<string, string> ballot_option_mapping = 8;
+    oneof context {
+        DiscordBallotContextDTO discord = 9;
+        WebBallotContextDTO web = 10;
+    }
+}
+
+message DiscordBallotContextDTO {
+    string user_id = 1;
+    string user_name = 2;
+}
+
+message WebBallotContextDTO {
+    string user_id = 1;
+    string user_name = 2;
+}
+
+enum PollFeatureDTO {
+    UNKNOWN = 0;
+    DISABLE_RANDOMIZED_BALLOTS = 1;
+    DISABLE_ANYTIME_RESULTS = 2;
+}
+
+message PollRequestDTO {
+    string topic = 1;
+    map<string, string> options = 2;
+    repeated PollFeatureDTO features = 3;
+    oneof context {
+        DiscordPollContextDTO discord = 4;
+        WebPollContextDTO web = 5;
+    }
+}
+
+message PollDTO {
+    string id = 1;
+    optional string guild_id = 2 [deprecated = true];
+    optional string owner_id = 3 [deprecated = true];
+    google.protobuf.Timestamp created_at = 4;
+    google.protobuf.Timestamp closes_at = 5;
+    string topic = 6;
+    map<string, string> options = 7;
+    map<string, BallotDTO> ballots = 8 [deprecated = true];
+    repeated PollFeatureDTO features = 9;
+    optional discord.MessageRefDTO message_ref = 10 [deprecated = true];
+    oneof context {
+        DiscordPollContextDTO discord = 11;
+        WebPollContextDTO web = 12;
+    }
+}
+
+message DiscordPollContextDTO {
+    string guild_id = 1;
+    string owner_id = 2;
+    optional discord.MessageRefDTO message_ref = 3;
+}
+
+message WebPollContextDTO {
+    string owner_id = 1;
+}
+

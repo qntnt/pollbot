@@ -1,0 +1,52 @@
+{
+    "name": "pollbot",
+    "version": "1.0.0",
+    "description": "Discord bot for ranked choice polls",
+    "main": "index.js",
+    "repository": "git@github.com:quentintopper/pollbot.git",
+    "author": "Quentin <quentopp@gmail.com>",
+    "license": "UNLICENSED",
+    "devDependencies": {
+        "@types/jest": "^26.0.20",
+        "@types/random": "^3.0.1",
+        "@types/seedrandom": "^3.0.1",
+        "@typescript-eslint/eslint-plugin": "^4.13.0",
+        "@typescript-eslint/parser": "^4.13.0",
+        "eslint": "^7.17.0",
+        "jest": "^26.6.3",
+        "ts-jest": "^26.4.4",
+        "ts-node-dev": "^1.1.1",
+        "typescript": "^4.4.3"
+    },
+    "scripts": {
+        "build": "tsc",
+        "watch": "tsc -w",
+        "dev": "ts-node-dev src/index.ts --watch",
+        "devProd": "NODE_ENV=production ts-node-dev src/index.ts --watch",
+        "devStaging": "NODE_ENV=staging ts-node-dev src/index.ts --watch",
+        "test": "jest",
+        "start": "node build/index.js"
+    },
+    "dependencies": {
+        "@discordjs/rest": "^0.3.0",
+        "@qntnt/ts-utils": "^1.0.0",
+        "@tsconfig/recommended": "^1.0.1",
+        "@types/columnify": "^1.5.0",
+        "@types/luxon": "^1.25.1",
+        "@types/moment": "^2.13.0",
+        "@types/moment-timezone": "^0.5.30",
+        "@types/node": "^14.14.20",
+        "columnify": "^1.5.4",
+        "csv": "^5.3.2",
+        "discord-api-types": "^0.26.1",
+        "discord.js": "^13.2.0",
+        "firebase": "^8.2.2",
+        "firebase-admin": "^9.4.2",
+        "luxon": "^1.25.0",
+        "moment": "^2.29.1",
+        "moment-timezone": "^0.5.32",
+        "random": "^3.0.6",
+        "seedrandom": "^3.0.5",
+        "idl": "link:../../packages/idl-ts"
+    }
+}

@@ -1,0 +1,4 @@
+POST http://[::1]:3000/polls HTTP/1.1
+content-type: application/json
+
+{"id":"2231","guildId":"818294054395314206","ownerId":"211517489329209345","createdAt":"2022-02-11T10:07:45.000Z","closesAt":"2022-02-14T10:07:45.000Z","topic":"test","options":{"a":"a","b":"b","c":"c"},"ballots":{},"features":[1,2],"messageRef":{"id":"941636618547236866","channelId":"941634051012444190"}}

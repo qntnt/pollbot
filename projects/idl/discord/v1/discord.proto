@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package discord;
+
+message GuildDataDTO {
+    string id = 1;
+    map<string, bool> admins = 2;
+}
+
+message MessageRefDTO {
+    string id = 1;
+    string channel_id = 2;
+}

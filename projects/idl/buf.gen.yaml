@@ -1,0 +1,11 @@
+version: v1
+plugins:
+  - name: ts
+    out: ../../packages/idl-ts/lib
+    strategy: all
+    path: ../../packages/idl-ts/node_modules/ts-proto/protoc-gen-ts_proto
+    opt:
+      - esModuleInterop=true
+      - oneof=unions
+      # - forceLong=long
+      - useDate=false
