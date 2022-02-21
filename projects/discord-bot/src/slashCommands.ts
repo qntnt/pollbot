@@ -108,6 +108,15 @@ const pollCommand =  new SlashCommandBuilder()
             )
     )
 
+const helpCommand = new SlashCommandBuilder()
+    .setName('help')
+    .setDescription(`View information about pollbot commands`)
+    .addBooleanOption(option => 
+        option
+            .setName('public')
+            .setDescription('Help message is visible to other users')
+            .setRequired(false)
+    )
 const deleteMyUserDataCommand = new SlashCommandBuilder()
     .setName('unsafe_delete_my_user_data')
     .setDescription(`Deletes all of your polls and ballots. This is cannot be reversed.`)
@@ -120,6 +129,7 @@ const deleteMyUserDataCommand = new SlashCommandBuilder()
 
 const commands = [
     pollCommand,
+    helpCommand,
     deleteMyUserDataCommand,
 ];
 

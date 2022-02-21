@@ -1,4 +1,4 @@
-import { ButtonInteraction, CommandInteraction, EnumValueMapped, GuildMember, Message, MessageActionRow, MessageAttachment, MessageButton, MessageEditOptions, MessageEmbed, MessageEmbedImage, MessageReaction, PartialMessage, PartialUser, Team, User } from 'discord.js'
+import { ButtonInteraction, CommandInteraction, DiscordAPIError, EnumValueMapped, GuildMember, Message, MessageActionRow, MessageAttachment, MessageButton, MessageEditOptions, MessageEmbed, MessageEmbedImage, MessageReaction, PartialMessage, PartialUser, Team, User } from 'discord.js'
 import moment from 'moment-timezone'
 import { Option, PollOptionKey, Poll, PollConfig, PollId, Vote, PollFeature, POLL_FEATURES_MAPPER } from './models'
 import storage from './storage'
@@ -8,6 +8,7 @@ import { L, PREFIX } from './settings'
 import { reverseLookup } from './util/record'
 import { DateTime } from 'luxon'
 import { AnyUser, Context, Interaction } from './Context'
+import { Timestamp } from 'idl/lib/google/protobuf/timestamp'
 
 export const POLLBOT_PREFIX = PREFIX
 export const CREATE_POLL_COMMAND = `${POLLBOT_PREFIX} poll`
@@ -164,6 +165,9 @@ export async function updatePoll(
     }
     if (closesAt) {
         const date = DateTime.fromISO(closesAt)
+        if (!date.isValid) {
+            return await ctx.editReply({...simpleSendable(`The date for \`closes_at\` is invalid.`), ephemeral: true})
+        }
         poll.closesAt = date.toJSDate()
         embed = embed
             .setFooter('closes_at')
@@ -188,17 +192,30 @@ export async function updatePoll(
         }
     }
     await storage.updatePoll(poll.id, poll)
-    await updatePollMessage(ctx, poll, {
-        embeds: [
-            createPollEmbed(poll)
-        ]
-    })
-    return ctx.editReply({
+    await ctx.editReply({
         embeds: [
             embed
         ],
         ephemeral: true,
     })
+    try {
+        await updatePollMessage(ctx, poll, {
+            embeds: [
+                createPollEmbed(poll)
+            ]
+        })
+    } catch(e) {
+        if (e instanceof DiscordAPIError && e.code === 50001) {
+            await ctx.followUp({
+                embeds: [
+                    new MessageEmbed({
+                        color: 'RED',
+                        description: 'I couldn\'t update the poll message with your changes. Please make sure that I\'m invited to the poll channel and my permissions are correct.' 
+                    })
+                ]
+            })
+        }
+    }
 }
 
 function addPollFeature(poll: Poll, featureOrName: PollFeature | keyof typeof POLL_FEATURES_MAPPER) {
@@ -253,9 +270,7 @@ export async function closePoll(_ctx: Context<Interaction>, pollId: string) {
     }
     // Update poll closing time in background
     poll.closesAt = moment().toDate()
-    await storage.updatePoll(poll.id, {
-        closesAt: poll.closesAt
-    })
+    await storage.updatePoll(poll.id, poll)
     await updatePollMessage(ctx, poll, {
         embeds: [ createPollEmbed(poll) ]
     })
@@ -561,6 +576,7 @@ export async function submitBallot(ctx: Context<Message>,  message: Message) {
             }, {} as Record<PollOptionKey, Vote>)
     }
     const updatedBallot = await storage.updateBallot(ballot.id, {
+        ...ballot,
         updatedAt: moment().toDate(),
         votes,
     })
@@ -594,33 +610,33 @@ export async function submitBallot(ctx: Context<Message>,  message: Message) {
     })
 }
 
+export function helpEmbed() {
+    return new MessageEmbed({
+        title: 'Pollbot help',
+    })
+        .addField(
+            'General Commands',
+            '`/help` - View this help information'
+        )
+        .addField(
+            'Poll Commands',
+            '`/poll create` - Create a poll\n'
+            + '`/poll results` - View poll results\n\n'
+            + '_These are privileged commands for poll owners, admins, and bot owners_\n'
+            + '`/poll close` - Close a poll\n'
+            + '`/poll update` - Update poll properties like the closing time, topic, and features\n'
+            + '`/poll audit` - Audit poll result and receive ballot information\n'
+        )
+        .addField(
+            'Destructive Commands',
+            '`/unsafe_delete_my_user_data` - Deletes **all** of your polls and ballots. This will affect polls that you\'ve voted on.'
+        )
+}
+
 export async function help(ctx: Context<Message>,  message: Message) {
     message.channel.send({
         embeds: [
-            new MessageEmbed({
-                title: 'Pollbot help',
-                description: `Type \`${POLLBOT_PREFIX} <command>\` to see detailed help information for each command.`
-            })
-                .addField('Example', `\`${CREATE_POLL_COMMAND}\` will give you information about how to create a poll.`)
-                .addField(
-                    'General Commands', 
-                    '`poll` - Create a poll\n'
-                    + '`results` - View current poll results\n'
-                    + '`help` - View this help information'
-                )
-                .addField(
-                    'Restricted Commands', 
-                    '_These are privileged commands for poll owners, admins, and bot owners_\n'
-                    + '`close` - Close a poll\n'
-                    + '`audit` - Audit poll result and receive ballot information\n'
-                    + '`set` - Update poll properties like the closing time and topic\n'
-                    + '`addFeatures` - Add features to a poll\n'
-                    + '`removeFeatures` - Remove features from a poll'
-                )
-                .addField(
-                    'Destructive Commands',
-                    '`deleteMyUserData` - Deletes **all** of your polls and ballots. This will affect polls that you\'ve voted on.'
-                )
+            helpEmbed()
         ]
     })
 }

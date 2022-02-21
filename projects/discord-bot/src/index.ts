@@ -57,12 +57,29 @@ async function handleCommandInteraction(interaction: Discord.CommandInteraction)
             case 'poll':
                 await pollCommand(ctx)
                 break
+            case 'help':
+                await helpCommand(ctx)
+                break
             case 'unsafe_delete_my_user_data':
                 const user = interaction.options.getUser('confirm_user', true)
                 await commands.deleteMyUserData(ctx, user)
                 break
         }
     } catch (e) {
+        if (e instanceof Discord.DiscordAPIError) {
+            if (e.code === 50001) {
+                await ctx.followUp({
+                    embeds: [
+                        new Discord.MessageEmbed({
+                            color: 'RED',
+                            description: 'I don\'t have access to successfully complete your command. Please make sure that I\'m invited to relevant channels and that my permissions are correct.',
+                        })
+                    ],
+                    ephemeral: true,
+                })
+                return
+            }
+        }
         console.error(e)
         const msg = {
             embeds: [
@@ -90,6 +107,14 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isCommand()) return await handleCommandInteraction(interaction)
     if (interaction.isButton()) return await handleButtonInteraction(interaction)
 })
+
+async function helpCommand(ctx: Context<Discord.CommandInteraction>) {
+    const isPublic = ctx.interaction.options.getBoolean('public', false) ?? false
+    await ctx.interaction.reply({
+        embeds: [ commands.helpEmbed() ],
+        ephemeral: !isPublic,
+    })
+}
 
 async function pollCommand(ctx: Context<Discord.CommandInteraction>) {
     const interaction = ctx.interaction
@@ -125,7 +150,7 @@ async function pollCommand(ctx: Context<Discord.CommandInteraction>) {
     }
 }
 
-client.on('message', async message => {
+client.on('messageCreate', async message => {
     try {
         const ctx = context.withMessage(message)
         // Ignore bot messages

@@ -8,4 +8,4 @@ plugins:
       - esModuleInterop=true
       - oneof=unions
       # - forceLong=long
-      - useDate=false
+      # - useDate=false

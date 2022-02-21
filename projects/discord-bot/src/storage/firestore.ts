@@ -5,6 +5,8 @@ import { zipToRecord } from '../util/array'
 import { shuffled } from '../util/random'
 import { Actions } from '../util/Actions'
 import { Storage } from './interface'
+import { DateTime } from 'luxon'
+import { PollDTO } from 'idl/lib/polls/v1/polls'
 
 admin.initializeApp()
 
@@ -30,14 +32,16 @@ export class FirestoreStorage implements Storage {
     async createPoll(pollConfig: PollConfig): Promise<Poll | undefined> {
         const pollId = await this.incrementPollId()
         const now = moment()
-        const poll: Poll = {
-            ...pollConfig,
+        const poll: Poll = PollDTO.fromJSON({
+            ...PollConfig.toJSON(pollConfig) as any,
             id: pollId,
             createdAt: now.toDate(),
             closesAt: now.add(3, 'days').toDate(),
             ballots: {},
-        }
-        await this.pollCollection.doc(pollId).set(poll)
+        })
+        poll.features = poll.features.filter(f => f != PollFeature.UNKNOWN && f != PollFeature.UNRECOGNIZED)
+        await this.pollCollection.doc(pollId)
+            .set(Poll.toJSON(poll) as any)
         return poll
     }
 
@@ -45,23 +49,42 @@ export class FirestoreStorage implements Storage {
         const snapshot = await this.pollCollection.doc(pollId).get()
         const data = snapshot.data()
         if (!data) return
-        const poll = {
-            ...data as Poll,
-            createdAt: data.createdAt.toDate(),
-            closesAt: data.closesAt.toDate(),
-            features: data.features.map((feature: any) => {
-                if (typeof(feature) === 'string') {
-                    return POLL_FEATURES_MAPPER[feature] ?? PollFeature.UNKNOWN
-                } else {
-                    return feature
-                }
-            })
+        let createdAt = data.createdAt
+        if (typeof(createdAt) === 'string') {
+            createdAt = DateTime.fromISO(createdAt).toJSDate()
+        } else {
+            createdAt = createdAt.toDate()
         }
+        let closesAt = data.closesAt
+        if (typeof(closesAt) === 'string') {
+            closesAt = DateTime.fromISO(closesAt).toJSDate()
+        } else {
+            closesAt = closesAt.toDate()
+        }
+        const poll = PollDTO.fromJSON({
+            ...Poll.fromJSON(data),
+            createdAt: createdAt,
+            closesAt: closesAt,
+            features: data.features
+                .map((feature: unknown) => {
+                    if (typeof(feature) === 'string') {
+                        if (feature === 'disableRandomizedBallots') return 'DISABLE_RANDOMIZED_BALLOTS'
+                        if (feature === 'disableAnytimeResults') return 'DISABLE_ANYTIME_RESULTS'
+                    }
+                    if (typeof(feature) === 'number') {
+                        if (feature === PollFeature.DISABLE_RANDOMIZED_BALLOTS) return 'DISABLE_RANDOMIZED_BALLOTS'
+                        if (feature === PollFeature.DISABLE_ANYTIME_RESULTS) return 'DISABLE_ANYTIME_RESULTS'
+                    }
+                    return feature
+                })
+        })
+        poll.features = poll.features.filter(f => f !== PollFeature.UNKNOWN && f !== PollFeature.UNRECOGNIZED)
         return poll
     }
 
-    async updatePoll(pollId: string, poll: Partial<Poll>): Promise<Poll | undefined> {
-        await this.pollCollection.doc(pollId).update(poll)
+    async updatePoll(pollId: string, poll: Poll): Promise<Poll | undefined> {
+        await this.pollCollection.doc(pollId)
+            .update(Poll.toJSON(poll) as any)
         return await this.getPoll(pollId)
     }
 
@@ -84,7 +107,7 @@ export class FirestoreStorage implements Storage {
     }
 
     async createGuildData(guildData: GuildData): Promise<GuildData | undefined> {
-        await this.guildCollection.doc(guildData.id).set(guildData)
+        await this.guildCollection.doc(guildData.id).set(GuildData.toJSON(guildData) as any)
         return guildData
     }
 
@@ -104,7 +127,7 @@ export class FirestoreStorage implements Storage {
             return acc
         }, {} as Record<PollOptionKey, Vote>)
         const randomizedBallotMapping = zipToRecord(shuffled(pollOptionKeys), pollOptionKeys) as Record<BallotOptionKey, PollOptionKey>
-        const ballot: Ballot = {
+        const ballot: Ballot = Ballot.fromJSON({
             pollId: poll.id,
             id: poll.id + userId,
             createdAt: now.toDate(),
@@ -118,38 +141,42 @@ export class FirestoreStorage implements Storage {
                     userName,
                 }
             }
-        }
-        await this.ballotCollection.doc(ballot.id).set(ballot)
+        })
+        await this.ballotCollection.doc(ballot.id)
+            .set(Ballot.toJSON(ballot) as any)
         return ballot
     }
 
     async findBallot(pollId: string, userId: UserId): Promise<Ballot | undefined> {
-        const snapshot = await this.ballotCollection.where('pollId', '==', pollId)
-            .where('userId', '==', userId)
+        // v2
+        let snapshot =  await this.ballotCollection.where('pollId', '==', pollId)
+            .where('discord.userId', '==', userId)
             .get()
+        if (snapshot.empty) {
+            // v1
+            snapshot = await this.ballotCollection.where('pollId', '==', pollId)
+                .where('userId', '==', userId)
+                .get()
+        }
         if (snapshot.empty) return
         const data = snapshot.docs[0].data()
         if (!data) return
-        const ballot = {
-            ...data as Ballot,
-            createdAt: data.createdAt.toDate(),
-            updatedAt: data.updatedAt.toDate(),
-        }
+        const ballot = Ballot.fromJSON(data)
         return ballot
     }
 
-    async updateBallot(ballotId: string, ballot: Partial<Ballot>): Promise<Ballot | undefined> {
+    async updateBallot(ballotId: string, ballot: Ballot): Promise<Ballot | undefined> {
         const doc = this.ballotCollection.doc(ballotId)
-        await doc.update(ballot)
+        await doc.update(Ballot.toJSON(ballot) as any)
         const snapshot = await doc.get()
         if (!snapshot.exists) return
-        return snapshot.data() as Ballot
+        return Ballot.fromJSON(snapshot.data())
     }
 
     async listBallots(pollId: string): Promise<Ballot[]> {
         const snapshot = await this.ballotCollection.where('pollId', '==', pollId)
             .get()
-        return snapshot.docs.map(doc => doc.data()) as Ballot[]
+        return snapshot.docs.map(doc => Ballot.fromJSON(doc.data()))
     }
 
     async getUserDataMetrics(userId: string): Promise<UserDataMetrics> {

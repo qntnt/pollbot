@@ -95,8 +95,8 @@ export interface BallotDTO {
   userId?: string | undefined;
   /** @deprecated */
   userName?: string | undefined;
-  createdAt: Timestamp | undefined;
-  updatedAt: Timestamp | undefined;
+  createdAt: Date | undefined;
+  updatedAt: Date | undefined;
   votes: { [key: string]: VoteDTO };
   ballotOptionMapping: { [key: string]: string };
   context?:
@@ -144,8 +144,8 @@ export interface PollDTO {
   guildId?: string | undefined;
   /** @deprecated */
   ownerId?: string | undefined;
-  createdAt: Timestamp | undefined;
-  closesAt: Timestamp | undefined;
+  createdAt: Date | undefined;
+  closesAt: Date | undefined;
   topic: string;
   options: { [key: string]: string };
   /** @deprecated */
@@ -855,10 +855,16 @@ export const BallotDTO = {
       writer.uint32(34).string(message.userName);
     }
     if (message.createdAt !== undefined) {
-      Timestamp.encode(message.createdAt, writer.uint32(42).fork()).ldelim();
+      Timestamp.encode(
+        toTimestamp(message.createdAt),
+        writer.uint32(42).fork()
+      ).ldelim();
     }
     if (message.updatedAt !== undefined) {
-      Timestamp.encode(message.updatedAt, writer.uint32(50).fork()).ldelim();
+      Timestamp.encode(
+        toTimestamp(message.updatedAt),
+        writer.uint32(50).fork()
+      ).ldelim();
     }
     Object.entries(message.votes).forEach(([key, value]) => {
       BallotDTO_VotesEntry.encode(
@@ -907,10 +913,14 @@ export const BallotDTO = {
           message.userName = reader.string();
           break;
         case 5:
-          message.createdAt = Timestamp.decode(reader, reader.uint32());
+          message.createdAt = fromTimestamp(
+            Timestamp.decode(reader, reader.uint32())
+          );
           break;
         case 6:
-          message.updatedAt = Timestamp.decode(reader, reader.uint32());
+          message.updatedAt = fromTimestamp(
+            Timestamp.decode(reader, reader.uint32())
+          );
           break;
         case 7:
           const entry7 = BallotDTO_VotesEntry.decode(reader, reader.uint32());
@@ -994,9 +1004,9 @@ export const BallotDTO = {
     message.userId !== undefined && (obj.userId = message.userId);
     message.userName !== undefined && (obj.userName = message.userName);
     message.createdAt !== undefined &&
-      (obj.createdAt = fromTimestamp(message.createdAt).toISOString());
+      (obj.createdAt = message.createdAt.toISOString());
     message.updatedAt !== undefined &&
-      (obj.updatedAt = fromTimestamp(message.updatedAt).toISOString());
+      (obj.updatedAt = message.updatedAt.toISOString());
     obj.votes = {};
     if (message.votes) {
       Object.entries(message.votes).forEach(([k, v]) => {
@@ -1028,14 +1038,8 @@ export const BallotDTO = {
     message.pollId = object.pollId ?? "";
     message.userId = object.userId ?? undefined;
     message.userName = object.userName ?? undefined;
-    message.createdAt =
-      object.createdAt !== undefined && object.createdAt !== null
-        ? Timestamp.fromPartial(object.createdAt)
-        : undefined;
-    message.updatedAt =
-      object.updatedAt !== undefined && object.updatedAt !== null
-        ? Timestamp.fromPartial(object.updatedAt)
-        : undefined;
+    message.createdAt = object.createdAt ?? undefined;
+    message.updatedAt = object.updatedAt ?? undefined;
     message.votes = Object.entries(object.votes ?? {}).reduce<{
       [key: string]: VoteDTO;
     }>((acc, [key, value]) => {
@@ -1614,10 +1618,16 @@ export const PollDTO = {
       writer.uint32(26).string(message.ownerId);
     }
     if (message.createdAt !== undefined) {
-      Timestamp.encode(message.createdAt, writer.uint32(34).fork()).ldelim();
+      Timestamp.encode(
+        toTimestamp(message.createdAt),
+        writer.uint32(34).fork()
+      ).ldelim();
     }
     if (message.closesAt !== undefined) {
-      Timestamp.encode(message.closesAt, writer.uint32(42).fork()).ldelim();
+      Timestamp.encode(
+        toTimestamp(message.closesAt),
+        writer.uint32(42).fork()
+      ).ldelim();
     }
     if (message.topic !== "") {
       writer.uint32(50).string(message.topic);
@@ -1677,10 +1687,14 @@ export const PollDTO = {
           message.ownerId = reader.string();
           break;
         case 4:
-          message.createdAt = Timestamp.decode(reader, reader.uint32());
+          message.createdAt = fromTimestamp(
+            Timestamp.decode(reader, reader.uint32())
+          );
           break;
         case 5:
-          message.closesAt = Timestamp.decode(reader, reader.uint32());
+          message.closesAt = fromTimestamp(
+            Timestamp.decode(reader, reader.uint32())
+          );
           break;
         case 6:
           message.topic = reader.string();
@@ -1783,9 +1797,9 @@ export const PollDTO = {
     message.guildId !== undefined && (obj.guildId = message.guildId);
     message.ownerId !== undefined && (obj.ownerId = message.ownerId);
     message.createdAt !== undefined &&
-      (obj.createdAt = fromTimestamp(message.createdAt).toISOString());
+      (obj.createdAt = message.createdAt.toISOString());
     message.closesAt !== undefined &&
-      (obj.closesAt = fromTimestamp(message.closesAt).toISOString());
+      (obj.closesAt = message.closesAt.toISOString());
     message.topic !== undefined && (obj.topic = message.topic);
     obj.options = {};
     if (message.options) {
@@ -1824,14 +1838,8 @@ export const PollDTO = {
     message.id = object.id ?? "";
     message.guildId = object.guildId ?? undefined;
     message.ownerId = object.ownerId ?? undefined;
-    message.createdAt =
-      object.createdAt !== undefined && object.createdAt !== null
-        ? Timestamp.fromPartial(object.createdAt)
-        : undefined;
-    message.closesAt =
-      object.closesAt !== undefined && object.closesAt !== null
-        ? Timestamp.fromPartial(object.closesAt)
-        : undefined;
+    message.createdAt = object.createdAt ?? undefined;
+    message.closesAt = object.closesAt ?? undefined;
     message.topic = object.topic ?? "";
     message.options = Object.entries(object.options ?? {}).reduce<{
       [key: string]: string;
@@ -2254,13 +2262,13 @@ function fromTimestamp(t: Timestamp): Date {
   return new Date(millis);
 }
 
-function fromJsonTimestamp(o: any): Timestamp {
+function fromJsonTimestamp(o: any): Date {
   if (o instanceof Date) {
-    return toTimestamp(o);
+    return o;
   } else if (typeof o === "string") {
-    return toTimestamp(new Date(o));
+    return new Date(o);
   } else {
-    return Timestamp.fromJSON(o);
+    return fromTimestamp(Timestamp.fromJSON(o));
   }
 }
 
