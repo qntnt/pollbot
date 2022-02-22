@@ -1,0 +1,14 @@
+{
+    "extends": "@tsconfig/recommended/tsconfig.json",
+    "compilerOptions": {
+	    "lib": ["es2020"],
+        "removeComments": true,
+        "preserveConstEnums": true,
+        "rootDir": "lib",
+        "inlineSourceMap": true,
+        "esModuleInterop": true,
+        "declaration": true
+    },
+    "include": ["lib/**/*"],
+    "exclude": ["node_modules", "**/*.spec.ts"],
+}

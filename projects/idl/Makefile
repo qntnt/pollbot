@@ -1,4 +1,4 @@
-.PHONY: setup_mac_env clean generate build
+.PHONY: setup_mac_env clean generate build js-build
 
 setup_mac_env:
 	brew install bufbuild/buf/buf
@@ -10,4 +10,7 @@ clean:
 generate:
 	buf generate
 
-build:| clean generate
+js-build:
+	cd ../../packages/idl-ts && yarn build
+
+build:| clean generate js-build

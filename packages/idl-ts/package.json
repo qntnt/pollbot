@@ -5,6 +5,11 @@
   "license": "MIT",
   "private": true,
   "dependencies": {
-    "ts-proto": "^1.105.0"
+    "@tsconfig/recommended": "^1.0.1",
+    "ts-proto": "^1.105.0",
+    "typescript": "^4.5.5"
+  },
+  "scripts": {
+    "build": "tsc"
   }
 }
