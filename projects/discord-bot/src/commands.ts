@@ -743,12 +743,18 @@ export async function auditPoll(_ctx: Context<CommandInteraction>, pollId: strin
         Object.values(b.votes).forEach(v => {
             votes[v.option] = v.rank
         })
+        let userId = ''
+        let userName = ''
+        if (b.context?.$case === 'discord') {
+            userId = b.context.discord.userId
+            userName = b.context.discord.userName
+        }
         return {
             ballotId: b.id,
             createdAt: moment(b.createdAt).toISOString(),
             updatedAt: moment(b.updatedAt).toISOString(),
-            userId: b.userId,
-            userName: b.userName,
+            userId,
+            userName,
             ...votes,
         }
     }))
