@@ -1,4 +1,4 @@
-import { ButtonInteraction, CommandInteraction, DiscordAPIError, EnumValueMapped, GuildMember, Message, MessageActionRow, MessageAttachment, MessageButton, MessageEditOptions, MessageEmbed, MessageEmbedImage, MessageReaction, PartialMessage, PartialUser, Team, User } from 'discord.js'
+import { ButtonInteraction, CommandInteraction, DiscordAPIError, EnumValueMapped, GuildMember, Message, MessageActionRow, MessageAttachment, MessageButton, MessageEditOptions, MessageEmbed, MessageEmbedImage, MessageReaction, NewsChannel, PartialMessage, PartialUser, Team, TextBasedChannel, TextChannel, User } from 'discord.js'
 import moment from 'moment-timezone'
 import { Option, PollOptionKey, Poll, PollConfig, PollId, Vote, PollFeature, POLL_FEATURES_MAPPER } from './models'
 import storage from './storage'
@@ -9,6 +9,7 @@ import { reverseLookup } from './util/record'
 import { DateTime } from 'luxon'
 import { AnyUser, Context, Interaction } from './Context'
 import { Timestamp } from 'idl/lib/google/protobuf/timestamp'
+import { PollMetricsDTO } from 'idl/lib/polls/v1/polls'
 
 export const POLLBOT_PREFIX = PREFIX
 export const CREATE_POLL_COMMAND = `${POLLBOT_PREFIX} poll`
@@ -102,7 +103,8 @@ export async function createPoll(
             'I couldn\'t make this poll. Something went wrong.'
         ))
     }
-    const pollMsgEmbed = createPollEmbed(poll)
+    const metrics = await storage.getPollMetrics(poll.id)
+    const pollMsgEmbed = createPollEmbed(ctx, poll, metrics)
     const pollMessage = await ctx.editReply({
         embeds: [pollMsgEmbed],
         components: [
@@ -124,15 +126,29 @@ export async function createPoll(
     await storage.updatePoll(poll.id, poll)
 }
 
-function createPollEmbed(poll: Poll): MessageEmbed {
+function createPollEmbed(
+    ctx: Context, 
+    poll: Poll, 
+    metrics?: PollMetricsDTO, 
+    result?: Awaited<ReturnType<typeof getPollChannel>> & { message: Message }
+): MessageEmbed {
+    const { message } = result ?? {}
     const closesAt = moment(poll.closesAt).tz('America/Los_Angeles').format('dddd, MMMM Do YYYY, h:mm zz')
     const optionText = Object.values(poll?.options).map(o => `\`${o}\``).join(', ')
+    let footerText = `This poll closes at ${closesAt}`
+    
+    if (metrics && message?.editable) {
+        footerText += `\nBallots: ${metrics.ballotsSubmitted} submitted / ${metrics.ballotsRequested} requested`
+    }
+    L.d(footerText)
     return new MessageEmbed({
             title: `${POLL_ID_PREFIX}${poll.id}`,
             description: `React to this message for me to DM you a ballot`,
         })
         .addField(poll.topic, optionText)
-        .setFooter(`This poll closes at ${closesAt}`)
+        .setFooter({
+            text: footerText,
+        })
 }
 
 export async function updatePoll(
@@ -199,11 +215,12 @@ export async function updatePoll(
         ephemeral: true,
     })
     try {
-        await updatePollMessage(ctx, poll, {
+        const metrics = await storage.getPollMetrics(poll.id)
+        await updatePollMessage(ctx, poll, (channel) => ({
             embeds: [
-                createPollEmbed(poll)
+                createPollEmbed(ctx, poll, metrics, channel)
             ]
-        })
+        }))
     } catch(e) {
         if (e instanceof DiscordAPIError && e.code === 50001) {
             await ctx.followUp({
@@ -248,12 +265,58 @@ function removePollFeature(poll: Poll, featureOrName: PollFeature | keyof typeof
     }
 }
 
-async function updatePollMessage(ctx: Context, poll: Poll, options: MessageEditOptions) {
-    if (!ctx.guild || !poll.messageRef) return
-    const channel = await ctx.guild.channels.fetch(poll.messageRef.channelId)
-    if (!channel?.isText()) return
-    const message = await channel.messages.fetch(poll.messageRef.id)
-    await message.edit(options)
+async function getPollChannel(ctx: Context, poll: Poll) {
+    let guild = ctx.guild
+    if (!guild) {
+        const client = await ctx.client()
+        let guildId = poll.guildId
+        if (!guildId && poll.context?.$case === 'discord') {
+            guildId = poll.context.discord.guildId
+        }
+        if (!guildId) return
+        guild = await client.guilds.fetch(guildId)
+    }
+    let messageRef = poll.messageRef
+    if (poll.context?.$case === 'discord') {
+        messageRef = poll.context.discord.messageRef
+    }
+    if (!guild || !messageRef) return
+    const channel = await guild.channels.fetch(messageRef.channelId)
+    return {
+        channel,
+        guild,
+        messageRef,
+    }
+}
+
+async function updatePollMessage(
+    ctx: Context, 
+    poll: Poll, 
+    optionsBuilder: (inputs: Awaited<ReturnType<typeof getPollChannel>> & { message: Message }
+) => MessageEditOptions) {
+    const result = await getPollChannel(ctx, poll)
+    if (!result) return
+    const { channel, messageRef } = result
+    if (!channel?.isText() || !messageRef) {
+        L.d('Channel is not valid')
+        return
+    }
+    const permissions = channel.permissionsFor(ctx.user.id)
+    if (permissions?.has('SEND_MESSAGES') && permissions.has('READ_MESSAGE_HISTORY')) {
+        const message = await channel.messages.fetch(messageRef.id)
+        if (message.editable) {
+            return await message.edit({
+                ...optionsBuilder({
+                    ...result,
+                    message,
+                }),
+            })
+        } else {
+            L.d('Message is not editable')
+        }
+    } else {
+        L.d('Cannot edit poll message')
+    }
 }
 
 export async function closePoll(_ctx: Context<Interaction>, pollId: string) {
@@ -271,9 +334,10 @@ export async function closePoll(_ctx: Context<Interaction>, pollId: string) {
     // Update poll closing time in background
     poll.closesAt = moment().toDate()
     await storage.updatePoll(poll.id, poll)
-    await updatePollMessage(ctx, poll, {
-        embeds: [ createPollEmbed(poll) ]
-    })
+    const metrics = await storage.getPollMetrics(poll.id)
+    await updatePollMessage(ctx, poll, (channel) => ({
+        embeds: [ createPollEmbed(ctx, poll, metrics, channel) ]
+    }))
     try {
         const ballots = await storage.listBallots(poll.id)
         const results = computeResults(poll, ballots)
@@ -389,6 +453,11 @@ export async function createBallotFromButton(ctx: Context<ButtonInteraction>) {
                 }
             },
         })
+    } else {
+        for (const o in ballot.votes) {
+            ballot.votes[o].rank = undefined
+        }
+        await storage.updateBallot(ballot.id, ballot)
     }
 
     if (!ballot) {
@@ -442,6 +511,11 @@ export async function createBallotFromButton(ctx: Context<ButtonInteraction>) {
         ],
         ephemeral: true,
     })
+
+    const metrics = await storage.getPollMetrics(poll.id)
+    await updatePollMessage(ctx, poll, (result) => ({
+        embeds: [ createPollEmbed(ctx, poll, metrics, result) ]
+    }))
 }
 
 export async function createBallot(ctx: Context<MessageReaction>, reaction: MessageReaction, user: User | PartialUser) {
@@ -475,6 +549,11 @@ export async function createBallot(ctx: Context<MessageReaction>, reaction: Mess
                 }
             }
         })
+    } else {
+        for (const o in ballot.votes) {
+            ballot.votes[o].rank = undefined
+        }
+        await storage.updateBallot(ballot.id, ballot)
     }
 
     if (!ballot) {
@@ -505,9 +584,14 @@ export async function createBallot(ctx: Context<MessageReaction>, reaction: Mess
             `_Invalid options will be ignored_\n`)
         .addField(poll.topic, `\`\`\`\n${optionText}\n\`\`\``)
         .setFooter(`Privacy notice: Your user id and current user name is linked to your ballot. Your ballot is viewable by you and bot admins.\n\nballot#${ballot.id}`)
-    user.send({
+    await user.send({
         embeds: [responseEmbed]
     })
+
+    const metrics = await storage.getPollMetrics(poll.id)
+    await updatePollMessage(ctx, poll, (channel) => ({
+        embeds: [ createPollEmbed(ctx, poll, metrics, channel) ]
+    }))
 }
 
 export async function submitBallot(ctx: Context<Message>,  message: Message) {
@@ -605,9 +689,14 @@ export async function submitBallot(ctx: Context<Message>,  message: Message) {
         .setFooter(`${POLL_ID_PREFIX}${poll.id}\nballot#${ballot.id}`)
         .setTimestamp()
 
-    return message.channel.send({
+    await message.channel.send({
         embeds: [responseEmbed]
     })
+    const metrics = await storage.getPollMetrics(poll.id)
+
+    await updatePollMessage(ctx, poll, (channel) => ({
+        embeds: [ createPollEmbed(ctx, poll, metrics, channel) ]
+    }))
 }
 
 export function helpEmbed() {

@@ -202,8 +202,29 @@ client.on('messageCreate', async message => {
         await commands.help(ctx, message)
         return
     } catch (e) {
+        if (e instanceof Discord.DiscordAPIError) {
+            if (e.code === 50001) {
+                await message.channel.send({
+                    embeds: [
+                        new Discord.MessageEmbed({
+                            color: 'RED',
+                            description: 'I don\'t have access to successfully complete your command. Please make sure that I\'m invited to relevant channels and that my permissions are correct.',
+                        })
+                    ],
+                })
+                return
+            }
+        }
         console.error(e)
-        await message.channel.send('There was an unknown error with your command. Sorry about that.')
+        const msg = {
+            embeds: [
+                new Discord.MessageEmbed({
+                    color: 'RED',
+                    description: 'There was an unknown error with your command. Sorry about that. Please reach out to [Pollbot support](https://discord.gg/uC2rkUyDdE) if there are further problems',
+                })
+            ],
+        }
+        await message.channel.send(msg)
     }
 })
 

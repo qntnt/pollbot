@@ -1,3 +1,4 @@
+import { PollMetricsDTO } from "idl/lib/polls/v1/polls";
 import {
     Poll,
     Ballot,
@@ -22,6 +23,8 @@ export interface Storage {
     getPoll(pollId: PollId): Promise<Poll | undefined>
 
     updatePoll(pollId: PollId, poll: Poll): Promise<Poll | undefined>
+
+    getPollMetrics(pollId: PollId): Promise<PollMetricsDTO | undefined>
 
     createBallot(poll: Poll, ballotConfig: BallotConfig): Promise<Ballot | undefined>
 

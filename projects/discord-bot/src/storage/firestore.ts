@@ -6,7 +6,8 @@ import { shuffled } from '../util/random'
 import { Actions } from '../util/Actions'
 import { Storage } from './interface'
 import { DateTime } from 'luxon'
-import { PollDTO } from 'idl/lib/polls/v1/polls'
+import { PollDTO, PollMetricsDTO } from 'idl/lib/polls/v1/polls'
+import { L } from '../settings'
 
 admin.initializeApp()
 
@@ -62,7 +63,7 @@ export class FirestoreStorage implements Storage {
             closesAt = closesAt.toDate()
         }
         const poll = PollDTO.fromJSON({
-            ...Poll.fromJSON(data),
+            ...Poll.toJSON(Poll.fromJSON(data)) as any,
             createdAt: createdAt,
             closesAt: closesAt,
             features: data.features
@@ -86,6 +87,27 @@ export class FirestoreStorage implements Storage {
         await this.pollCollection.doc(pollId)
             .update(Poll.toJSON(poll) as any)
         return await this.getPoll(pollId)
+    }
+
+    async getPollMetrics(pollId: string): Promise<PollMetricsDTO | undefined> {
+        const snapshot = await this.ballotCollection.where('pollId', '==', pollId)
+            .select('votes')
+            .get()
+        const ballots = snapshot.docs.map(doc => Ballot.fromJSON(doc.data()))
+        let ballotsSubmitted = 0
+        ballots.forEach(b => {
+            const votes = Object.values(b.votes)
+            for (const v of votes) {
+                if (v.rank) {
+                    ballotsSubmitted += 1
+                    break
+                }
+            }
+        })
+        return {
+            ballotsRequested: ballots.length,
+            ballotsSubmitted,
+        }
     }
 
     async listGuildData(): Promise<string[]> {

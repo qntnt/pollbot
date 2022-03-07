@@ -116,6 +116,11 @@ message PollDTO {
     }
 }
 
+message PollMetricsDTO {
+    int32 ballots_requested = 1;
+    int32 ballots_submitted = 2;
+}
+
 message DiscordPollContextDTO {
     string guild_id = 1;
     string owner_id = 2;

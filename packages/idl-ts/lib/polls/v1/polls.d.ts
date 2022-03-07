@@ -133,6 +133,10 @@ export interface PollDTO_BallotsEntry {
     key: string;
     value: BallotDTO | undefined;
 }
+export interface PollMetricsDTO {
+    ballotsRequested: number;
+    ballotsSubmitted: number;
+}
 export interface DiscordPollContextDTO {
     guildId: string;
     ownerId: string;
@@ -2469,6 +2473,19 @@ export declare const PollDTO_BallotsEntry: {
             } & Record<Exclude<keyof I["value"]["context"], "$case" | "web">, never>) | undefined;
         } & Record<Exclude<keyof I["value"], keyof BallotDTO>, never>) | undefined;
     } & Record<Exclude<keyof I, keyof PollDTO_BallotsEntry>, never>>(object: I): PollDTO_BallotsEntry;
+};
+export declare const PollMetricsDTO: {
+    encode(message: PollMetricsDTO, writer?: _m0.Writer): _m0.Writer;
+    decode(input: _m0.Reader | Uint8Array, length?: number | undefined): PollMetricsDTO;
+    fromJSON(object: any): PollMetricsDTO;
+    toJSON(message: PollMetricsDTO): unknown;
+    fromPartial<I extends {
+        ballotsRequested?: number | undefined;
+        ballotsSubmitted?: number | undefined;
+    } & {
+        ballotsRequested?: number | undefined;
+        ballotsSubmitted?: number | undefined;
+    } & Record<Exclude<keyof I, keyof PollMetricsDTO>, never>>(object: I): PollMetricsDTO;
 };
 export declare const DiscordPollContextDTO: {
     encode(message: DiscordPollContextDTO, writer?: _m0.Writer): _m0.Writer;

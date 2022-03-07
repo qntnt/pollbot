@@ -168,6 +168,11 @@ export interface PollDTO_BallotsEntry {
   value: BallotDTO | undefined;
 }
 
+export interface PollMetricsDTO {
+  ballotsRequested: number;
+  ballotsSubmitted: number;
+}
+
 export interface DiscordPollContextDTO {
   guildId: string;
   ownerId: string;
@@ -2018,6 +2023,75 @@ export const PollDTO_BallotsEntry = {
       object.value !== undefined && object.value !== null
         ? BallotDTO.fromPartial(object.value)
         : undefined;
+    return message;
+  },
+};
+
+function createBasePollMetricsDTO(): PollMetricsDTO {
+  return { ballotsRequested: 0, ballotsSubmitted: 0 };
+}
+
+export const PollMetricsDTO = {
+  encode(
+    message: PollMetricsDTO,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
+    if (message.ballotsRequested !== 0) {
+      writer.uint32(8).int32(message.ballotsRequested);
+    }
+    if (message.ballotsSubmitted !== 0) {
+      writer.uint32(16).int32(message.ballotsSubmitted);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): PollMetricsDTO {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBasePollMetricsDTO();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.ballotsRequested = reader.int32();
+          break;
+        case 2:
+          message.ballotsSubmitted = reader.int32();
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): PollMetricsDTO {
+    return {
+      ballotsRequested: isSet(object.ballotsRequested)
+        ? Number(object.ballotsRequested)
+        : 0,
+      ballotsSubmitted: isSet(object.ballotsSubmitted)
+        ? Number(object.ballotsSubmitted)
+        : 0,
+    };
+  },
+
+  toJSON(message: PollMetricsDTO): unknown {
+    const obj: any = {};
+    message.ballotsRequested !== undefined &&
+      (obj.ballotsRequested = Math.round(message.ballotsRequested));
+    message.ballotsSubmitted !== undefined &&
+      (obj.ballotsSubmitted = Math.round(message.ballotsSubmitted));
+    return obj;
+  },
+
+  fromPartial<I extends Exact<DeepPartial<PollMetricsDTO>, I>>(
+    object: I
+  ): PollMetricsDTO {
+    const message = createBasePollMetricsDTO();
+    message.ballotsRequested = object.ballotsRequested ?? 0;
+    message.ballotsSubmitted = object.ballotsSubmitted ?? 0;
     return message;
   },
 };
