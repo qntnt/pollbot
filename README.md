@@ -32,3 +32,6 @@ You will need to set up a new Firestore project and enable Firestore. Then set u
 
 ## Discord Setup
 You will need to create a new Discord application and [set up a new bot user](https://discordjs.guide/preparations/setting-up-a-bot-application.html#creating-your-bot) for it. Ensure that the bot invite has all permissions you need for pollbot (application commands, read message history, etc).
+
+## Environment Setup
+Discord and Firestore require some environment variables to be created for pollbot to function. These can be seen in `projects/discord-bot/src/settings.ts`. If documentation in `projects/discord-bot` is not sufficient, please reach out to my [discord server](https://discord.gg/z5MfPUGq4P) or leave an issue on this repo to have documentation improved.
