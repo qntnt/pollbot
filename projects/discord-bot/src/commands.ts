@@ -720,6 +720,10 @@ export function helpEmbed() {
             'Destructive Commands',
             '`/unsafe_delete_my_user_data` - Deletes **all** of your polls and ballots. This will affect polls that you\'ve voted on.'
         )
+        .addField(
+            'More questions?',
+            'Read the FAQ (https://github.com/qntnt/pollbot/wiki/FAQ)'
+        )
 }
 
 export async function help(ctx: Context<Message>,  message: Message) {
