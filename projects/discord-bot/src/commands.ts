@@ -756,33 +756,46 @@ export function isGuildMember(user?: AnyUser | null): user is GuildMember {
 }
 
 async function belongsToGuild(ctx: Context, poll: Poll, bypassForBotOwner = true) {
-    if (bypassForBotOwner && await ctx.checkPermissions(['botOwner'])) return true
-    return poll.guildId === ctx.guild?.id
+    try {
+        const isOwner = await ctx.checkPermissions(['botOwner'], poll)
+        if (bypassForBotOwner && isOwner) return true
+    } catch(e) {
+        if (poll.context?.$case === 'discord') {
+            return poll.context.discord.guildId === ctx.guild?.id
+        }
+        return poll.guildId === ctx.guild?.id
+    }
 }
 
 export async function auditPoll(_ctx: Context<CommandInteraction>, pollId: string) {
     const ctx = await _ctx.defer({ ephemeral: true })
     const poll = await storage.getPoll(pollId)
-    if (!poll) {
-        return ctx.editReply({
+    L.d('Poll', poll)
+    if (poll === undefined) {
+        L.d('Couldn\t find poll', poll)
+        return await ctx.editReply({
             ...simpleSendable(`Poll ${pollId} not found.`),
             ephemeral: true,
         })
     }
-    if (!await belongsToGuild(ctx, poll)) {
-        return ctx.editReply({
+    L.d('Check guild', poll)
+    const inGuild = await belongsToGuild(ctx, poll, true)
+    if (!inGuild) {
+        L.d('Poll doesn\'t belong to this guild', poll)
+        return await ctx.editReply({
             ...simpleSendable(`Poll ${pollId} does not belong to this server.`),
             ephemeral: true,
         })
     }
 
     try {
-        await ctx.checkPermissions(['botOwner', 'guildAdmin'], poll)
-    } catch {
-        return ctx.editReply({
+        await ctx.checkPermissions(['botOwner', 'guildAdmin', 'pollOwner'], poll)
+    } catch(e) {
+        L.d(e)
+        return await ctx.editReply({
             ...simpleSendable(
-                `You are not an admin for this bot instance.`, 
-                `Only admins may audit poll results and export ballot data.`
+                `You are not allowed to audit this poll.`, 
+                `Only admins, poll owners, and bot owners may audit poll results and export ballot data.`
             ),
             ephemeral: true,
         })
@@ -792,7 +805,7 @@ export async function auditPoll(_ctx: Context<CommandInteraction>, pollId: strin
 
     const results = computeResults(poll, ballots)
     if (!results) {
-        return ctx.editReply({
+        return await ctx.editReply({
             ...simpleSendable(`There was an issue computing results`),
             ephemeral: true,
         })

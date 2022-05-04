@@ -163,37 +163,52 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
     }
 
     async isBotOwner(user?: AnyUser | null): Promise<boolean> {
-        if (!user)
-            return false;
+        if (!user) { 
+            L.d('User doesn\'t exist')
+            return false; 
+        }
         const owner = await this.fetchOwner();
+        L.d('Owner', owner)
         if (owner) {
             if (isTeam(owner) && owner.members?.has(user.id) === true) {
+                L.d('Owner', owner)
                 return true;
             } else {
-                return owner.id === user.id;
+                const isOwner = owner.id === user.id
+                L.d('Owner === user', isOwner)
+                return isOwner;
             }
         } else {
             return false;
         }
     }
 
-    async checkPermissions(permissions: PollbotPermission[], poll?: Poll) {
+    async checkPermissions(permissions: PollbotPermission[] = [], poll: Poll | undefined = undefined) {
         const hasPerm = (p: PollbotPermission) => permissions.indexOf(p) !== -1;
-
-        if (hasPerm('pollOwner') && poll?.ownerId === this.user.id) {
+        const isOwner = await this.isBotOwner(this.user)
+        if (hasPerm('botOwner') && isOwner) {
             return true;
         }
-        if (hasPerm('guildAdmin') && isGuildMember(this.user) && poll) {
-            return this.user.permissions.has('ADMINISTRATOR') === true && this.user.guild.id === poll.guildId;
+        if (poll === undefined) {
+            L.d('Poll doesn\'t exist in checkPermissions')
+            throw 'Poll doesn\'t exist'
         }
-        if (hasPerm('botOwner') && this.isBotOwner(this.user)) {
-            return true;
+        if (poll.context?.$case === 'discord') {
+            if (hasPerm('pollOwner') && (poll.ownerId === this.user.id || poll.context.discord.ownerId === this.user.id)) {
+                L.d('Poll owner')
+                return true;
+            }
+            if (hasPerm('guildAdmin') && isGuildMember(this.user)) {
+                if (this.user.permissions.has('ADMINISTRATOR') === true && (this.user.guild.id === poll.guildId || this.user.guild.id === poll.context.discord.guildId)) {
+                    return true
+                }
+            }
+            if (hasPerm('pollGuild') && isGuildMember(this.user)) {
+                return true
+            }
+            throw `Missing permissions ${permissions}`;
         }
-        if (hasPerm('pollGuild')) {
-            isMessage(this._interaction);
-            return poll?.guildId;
-        }
-        throw `Missing permissions ${permissions}`;
+        throw 'Invalid poll context'
     }
 
     private async fetchApplication(): Promise<ClientApplication> {
