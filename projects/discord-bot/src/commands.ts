@@ -66,6 +66,11 @@ export async function createPoll(
             'You must specify at least two options in a poll.'
         ))
     }
+    if (optionsList.length > 26) {
+        return await ctx.editReply(simpleSendable(
+            'Polls cannot have more than 26 options'
+        ))
+    }
     const options: Record<PollOptionKey, Option> = {}
     optionsList.forEach((o, i) => {
         const key = String.fromCharCode(97 + i)
