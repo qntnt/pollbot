@@ -1,9 +1,9 @@
-import { ButtonInteraction, CacheType, Client, ClientApplication, CommandInteraction, Guild, GuildMember, InteractionDeferReplyOptions, InteractionReplyOptions, Message, MessageEmbed, MessageOptions, MessagePayload, MessageReaction, PartialUser, Team, TeamMember, TextBasedChannel, TextChannel, User, WebhookMessageOptions } from 'discord.js';
-import { Poll } from './models';
-import { delay } from '@qntnt/ts-utils/lib/promise';
-import { isTeam, PollbotPermission, isGuildMember } from './commands';
-import { APIMessage } from 'discord-api-types';
-import { L } from './settings';
+import { ButtonInteraction, CacheType, Client, ClientApplication, CommandInteraction, Guild, GuildMember, InteractionDeferReplyOptions, InteractionReplyOptions, Message, MessageEmbed, MessageOptions, MessagePayload, MessageReaction, PartialUser, Team, TeamMember, TextBasedChannel, TextChannel, User, WebhookMessageOptions } from 'discord.js'
+import { Poll } from './models'
+import { delay } from '@qntnt/ts-utils/lib/promise'
+import { isTeam, PollbotPermission, isGuildMember } from './commands'
+import { APIMessage } from 'discord-api-types'
+import { L } from './settings'
 
 
 export type Interaction = Message | MessageReaction | CommandInteraction | ButtonInteraction
@@ -44,9 +44,9 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
     }
 
     async init() {
-        this._application = await this.fetchApplication();
-        this._botOwner = await this.fetchOwner();
-        this._isInitialized = true;
+        this._application = await this.fetchApplication()
+        this._botOwner = await this.fetchOwner()
+        this._isInitialized = true
     }
 
     async withReply(reply: Message | APIMessage): Promise<Context<I, Message>> {
@@ -60,7 +60,7 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
             this._user,
             this._isInitialized,
             msg,
-        );
+        )
     }
 
     withButtonInteraction(buttonInteraction: ButtonInteraction): Context<ButtonInteraction, M> {
@@ -90,7 +90,7 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
     }
 
     withMessage(message: Message): Context<Message, M> {
-        const user = message.channel.type === 'DM' ? message.author : message.member ?? message.author;
+        const user = message.channel.type === 'DM' ? message.author : message.member ?? message.author
         return new Context(
             this._client,
             'Message',
@@ -118,14 +118,14 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
 
     async client(): Promise<Client> {
         if (this._client.isReady()) {
-            return this._client;
+            return this._client
         }
-        await delay(1000);
-        return await this.client();
+        await delay(1000)
+        return await this.client()
     }
 
     async application(): Promise<ClientApplication> {
-        return await this.fetchApplication();
+        return await this.fetchApplication()
     }
 
     get interaction(): I {
@@ -134,8 +134,8 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
 
     get user(): AnyUser {
         if (this._user === undefined)
-            throw 'Context user not defined';
-        return this._user;
+            throw 'Context user not defined'
+        return this._user
     }
 
     get guild(): Guild | undefined {
@@ -150,7 +150,7 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
 
     async defer(options?: InteractionDeferReplyOptions): Promise<Context<I, Message>> {
         if (this.isCommandInteraction()) {
-            const _msg = await this.interaction.deferReply({...options, fetchReply: true})
+            const _msg = await this.interaction.deferReply({ ...options, fetchReply: true })
             const msg = await this.resolveMessage(_msg)
             return this.withReply(msg)
         }
@@ -163,74 +163,79 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
     }
 
     async isBotOwner(user?: AnyUser | null): Promise<boolean> {
-        if (!user) { 
+        if (!user) {
             L.d('User doesn\'t exist')
-            return false; 
+            return false
         }
-        const owner = await this.fetchOwner();
+        const owner = await this.fetchOwner()
         L.d('Owner', owner)
         if (owner) {
             if (isTeam(owner) && owner.members?.has(user.id) === true) {
                 L.d('Owner', owner)
-                return true;
+                return true
             } else {
                 const isOwner = owner.id === user.id
                 L.d('Owner === user', isOwner)
-                return isOwner;
+                return isOwner
             }
         } else {
-            return false;
+            return false
         }
     }
 
     async checkPermissions(permissions: PollbotPermission[] = [], poll: Poll | undefined = undefined) {
-        const hasPerm = (p: PollbotPermission) => permissions.indexOf(p) !== -1;
-        const isOwner = await this.isBotOwner(this.user)
-        if (hasPerm('botOwner') && isOwner) {
-            return true;
-        }
-        if (poll === undefined) {
-            L.d('Poll doesn\'t exist in checkPermissions')
-            throw 'Poll doesn\'t exist'
-        }
-        if (poll.context?.$case === 'discord') {
-            if (hasPerm('pollOwner') && (poll.ownerId === this.user.id || poll.context.discord.ownerId === this.user.id)) {
-                L.d('Poll owner')
-                return true;
-            }
-            if (hasPerm('guildAdmin') && isGuildMember(this.user)) {
-                if (this.user.permissions.has('ADMINISTRATOR') === true && (this.user.guild.id === poll.guildId || this.user.guild.id === poll.context.discord.guildId)) {
-                    return true
-                }
-            }
-            if (hasPerm('pollGuild') && isGuildMember(this.user)) {
+        if (this.isCommandInteraction()) {
+            const memberPermissions = this.interaction.memberPermissions
+            const hasPerm = (p: PollbotPermission) => permissions.indexOf(p) !== -1
+            const isOwner = await this.isBotOwner(this.user)
+            if (hasPerm('botOwner') && isOwner) {
                 return true
             }
-            throw `Missing permissions ${permissions}`;
+            if (poll === undefined) {
+                L.d('Poll doesn\'t exist in checkPermissions')
+                throw 'Poll doesn\'t exist'
+            }
+            if (poll.context?.$case === 'discord') {
+                if (hasPerm('pollOwner') && (poll.ownerId === this.user.id || poll.context.discord.ownerId === this.user.id)) {
+                    L.d('Poll owner')
+                    return true
+                }
+                if (this.interaction.guildId !== poll.context.discord.guildId) throw 'The poll you are trying to audit does not belong to this server.'
+                if (hasPerm('guildAdmin') && memberPermissions?.has('ADMINISTRATOR') === true) {
+                    L.d('user', this.interaction.member)
+                    return true
+                }
+                if (hasPerm('pollGuild') && this.interaction.member) {
+                    return true
+                }
+                throw `Missing permissions ${permissions}`
+            }
+            throw 'Invalid poll context'
+        } else {
+            throw 'Message commands are not obsolete'
         }
-        throw 'Invalid poll context'
     }
 
     private async fetchApplication(): Promise<ClientApplication> {
         if (this._application === undefined) {
-            const client = await this.client();
-            this._application = client.application as ClientApplication;
+            const client = await this.client()
+            this._application = client.application as ClientApplication
         }
-        return this._application;
+        return this._application
     }
 
     private async fetchOwner(): Promise<BotOwner | undefined> {
         if (this._botOwner) {
-            return this._botOwner;
+            return this._botOwner
         }
-        const app = await this.application();
-        this._botOwner = app.owner ?? undefined;
-        return this._botOwner;
+        const app = await this.application()
+        this._botOwner = app.owner ?? undefined
+        return this._botOwner
     }
 
     private messagePayload(response: string | InteractionReplyOptions): InteractionReplyOptions {
         let payload: MessageOptions = {}
-        if (typeof(response) === 'string') {
+        if (typeof (response) === 'string') {
             payload = {
                 embeds: [
                     new MessageEmbed({
@@ -258,7 +263,7 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
     public async followUp(response: string | InteractionReplyOptions): Promise<Message> {
         if (!this.hasInteraction()) throw new Error('Cannot send message with no interaction')
         const payload = this.messagePayload(response)
-        if (this.isCommandInteraction() ) {
+        if (this.isCommandInteraction()) {
             const msg = await this.interaction.followUp({
                 ...payload,
                 fetchReply: true,
@@ -338,7 +343,7 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
                 return msg
             } else {
                 const msg = await this.interaction.channel.send(payload)
-                this._replyMessage = msg as M 
+                this._replyMessage = msg as M
                 return msg
             }
         }
@@ -357,7 +362,7 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
     }
 
     public replied(): this is Context<I, Message> {
-        if (this.isCommandInteraction() ) {
+        if (this.isCommandInteraction()) {
             return this.interaction.deferred || this.interaction.replied
         }
         return this._replyMessage !== undefined
@@ -379,7 +384,7 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
         return this._type === 'MessageReaction'
     }
 
-    public async resolveMessage( msg: APIMessage | Message): Promise<Message> {
+    public async resolveMessage(msg: APIMessage | Message): Promise<Message> {
         if (isMessage(msg)) {
             return msg
         } else {
@@ -393,8 +398,8 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
 function isMessage(msg: APIMessage | Interaction | undefined): msg is Message {
     if (msg === undefined) return false
     const _msg = msg as Message
-    return typeof(_msg.edit) == 'function' && 
-        typeof(_msg.delete) === 'function' &&
-        typeof(_msg.reply) === 'function' &&
-        typeof(_msg.react) === 'function'
+    return typeof (_msg.edit) == 'function' &&
+        typeof (_msg.delete) === 'function' &&
+        typeof (_msg.reply) === 'function' &&
+        typeof (_msg.react) === 'function'
 }
