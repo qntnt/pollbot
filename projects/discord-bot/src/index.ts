@@ -1,9 +1,10 @@
 import * as Discord from 'discord.js'
 import { DISCORD_TOKEN, L } from './settings'
 import * as commands from './commands'
-import { Context } from "./Context"
+import { AnySlashCommandBuilder, Context } from "./Context"
 import storage from './storage'
-import { registerCommands } from './slashCommands'
+import * as slashCommands from './slashCommands'
+import { SlashCommandBuilder } from "@discordjs/builders"
 
 const client = new Discord.Client({
     intents: [
@@ -17,7 +18,7 @@ const client = new Discord.Client({
 const context = new Context(client)
 context.init()
 
-registerCommands()
+slashCommands.registerCommands()
 
 client.once('ready', async () => {
     console.log(`Logged in as ${client.user?.tag ?? 'undefined'}`)
@@ -54,13 +55,28 @@ async function handleCommandInteraction(interaction: Discord.CommandInteraction)
     const ctx = context.withCommandInteraction(interaction)
     try {
         switch (interaction.commandName) {
-            case 'poll':
+            case slashCommands.pollCommand.name:
                 await pollCommand(ctx)
                 break
-            case 'help':
+            case slashCommands.pollCreateCommand.name:
+                await pollCreate(ctx)
+                break
+            case slashCommands.pollResultsCommand.name:
+                await pollResults(ctx)
+                break
+            case slashCommands.pollCloseCommand.name:
+                await pollClose(ctx)
+                break
+            case slashCommands.pollAuditCommand.name:
+                await pollAudit(ctx)
+                break
+            case slashCommands.pollUpdateCommand.name:
+                await pollUpdate(ctx)
+                break
+            case slashCommands.helpCommand.name:
                 await helpCommand(ctx)
                 break
-            case 'unsafe_delete_my_user_data':
+            case slashCommands.deleteMyUserDataCommand.name:
                 const user = interaction.options.getUser('confirm_user', true)
                 await commands.deleteMyUserData(ctx, user)
                 break
@@ -110,9 +126,83 @@ client.on('interactionCreate', async interaction => {
 
 async function helpCommand(ctx: Context<Discord.CommandInteraction>) {
     const isPublic = ctx.interaction.options.getBoolean('public', false) ?? false
-    await ctx.interaction.reply({
-        embeds: [ commands.helpEmbed() ],
-        ephemeral: !isPublic,
+    const commandName = ctx.interaction.options.getString('command', false) ?? undefined
+    if (commandName) {
+        const command = slashCommands.matchCommand(commandName)
+        if (command) {
+            const embed = commands.commandHelp(command)
+            await ctx.interaction.reply({
+                embeds: [embed],
+                ephemeral: true,
+            })
+        } else {
+            await ctx.interaction.reply({
+                embeds: [new Discord.MessageEmbed({
+                    title: `Couldn\'t recognize the command \`${commandName}\``,
+                })],
+                ephemeral: true,
+            })
+        }
+    } else {
+        await ctx.interaction.reply({
+            embeds: [commands.helpEmbed()],
+            ephemeral: !isPublic,
+        })
+    }
+}
+
+async function pollCreate(ctx: Context<Discord.CommandInteraction>) {
+    const interaction = ctx.interaction
+    const topic = interaction.options.getString('topic', true)
+    const optionsString = interaction.options.getString('options', true)
+    const randomizedBallots = interaction.options.getBoolean('randomized_ballots') ?? true
+    const anytimeResults = interaction.options.getBoolean('anytime_results') ?? true
+    if (interaction.channel?.type !== 'GUILD_TEXT') return
+    await commands.createPoll(ctx, topic, optionsString, randomizedBallots, anytimeResults)
+}
+
+async function pollResults(ctx: Context<Discord.CommandInteraction>) {
+    const interaction = ctx.interaction
+    const pollId = interaction.options.getString('poll_id', true)
+    const _private = interaction.options.getBoolean('private') ?? false
+    await commands.pollResults(ctx, pollId, _private)
+}
+
+async function pollClose(ctx: Context<Discord.CommandInteraction>) {
+    const pollId = ctx.interaction.options.getString('poll_id', true)
+    await commands.closePoll(ctx, pollId)
+}
+
+async function pollAudit(ctx: Context<Discord.CommandInteraction>) {
+    const pollId = ctx.interaction.options.getString('poll_id', true)
+    await commands.auditPoll(ctx, pollId)
+}
+
+async function pollUpdate(ctx: Context<Discord.CommandInteraction>) {
+    const interaction = ctx.interaction
+    const pollId = interaction.options.getString('poll_id', true)
+    const topic = interaction.options.getString('topic') ?? undefined
+    const closesAt = interaction.options.getString('closes_at') ?? undefined
+    const randomizedBallots = interaction.options.getBoolean('randomized_ballots') ?? undefined
+    const anytimeResults = interaction.options.getBoolean('anytime_results') ?? true
+    await commands.updatePoll(ctx, pollId, topic, closesAt, randomizedBallots, anytimeResults)
+}
+
+async function replyObsolete(interaction: Discord.CommandInteraction, newCommand: AnySlashCommandBuilder) {
+    const subcommand = interaction.options.getSubcommand()
+    await interaction.reply({
+        embeds: [
+            new Discord.MessageEmbed({
+                title: `\`/${interaction.commandName}${subcommand ? ' ' + subcommand : ''}\` is obsolete.`,
+                description: `Use \`/${newCommand.name}\` instead.`,
+                color: 'YELLOW',
+                footer: { text: 'This slash command will be removed after June 10th 2022.' }
+            })
+                .addField('Why?', 'Discord now supports slash command permissions. They don\'t support permissions for sub-commands yet, so this migration will give you more control over how you configure pollbot.')
+                .addField('Do I need to do anything?', 'If you just want to use pollbot as you have before, no action is necessary. Just use the new top-level commands instead of the old sub-commands.')
+                .addField('How do I update slash command permissions?', 'Go to your server settings. On the sidebar, click `Integrations`. Under "Bots and Apps", click `pollbot`. Under "Commands", modify command permissions. If the new slash commands don\'t show up for you, try reinviting pollbot to your server by clicking on it\'s profile and clicking the `Add to Server` button.')
+        ],
+        ephemeral: true,
     })
 }
 
@@ -120,33 +210,19 @@ async function pollCommand(ctx: Context<Discord.CommandInteraction>) {
     const interaction = ctx.interaction
     const subcommand = interaction.options.getSubcommand()
     if (subcommand === 'create') {
-        const topic = interaction.options.getString('topic', true)
-        const optionsString = interaction.options.getString('options', true)
-        const randomizedBallots = interaction.options.getBoolean('randomized_ballots') ?? true
-        const anytimeResults = interaction.options.getBoolean('anytime_results') ?? true
-        if (interaction.channel?.type !== 'GUILD_TEXT') return
-        await commands.createPoll(ctx, topic, optionsString, randomizedBallots, anytimeResults)
-    } 
+        await replyObsolete(interaction, slashCommands.pollCreateCommand)
+    }
     else if (subcommand === 'close') {
-        const pollId = interaction.options.getString('poll_id', true)
-        await commands.closePoll(ctx, pollId)
-    } 
+        await replyObsolete(interaction, slashCommands.pollCloseCommand)
+    }
     else if (subcommand === 'results') {
-        const pollId = interaction.options.getString('poll_id', true)
-        const _private = interaction.options.getBoolean('private') ?? false
-        await commands.pollResults(ctx, pollId, _private)
-    } 
+        await replyObsolete(interaction, slashCommands.pollResultsCommand)
+    }
     else if (subcommand === 'audit') {
-        const pollId = interaction.options.getString('poll_id', true)
-        await commands.auditPoll(ctx, pollId)
-    } 
+        await replyObsolete(interaction, slashCommands.pollAuditCommand)
+    }
     else if (subcommand === 'update') {
-        const pollId = interaction.options.getString('poll_id', true)
-        const topic = interaction.options.getString('topic') ?? undefined
-        const closesAt = interaction.options.getString('closes_at') ?? undefined
-        const randomizedBallots = interaction.options.getBoolean('randomized_ballots') ?? undefined
-        const anytimeResults = interaction.options.getBoolean('anytime_results') ?? true
-        await commands.updatePoll(ctx, pollId, topic, closesAt, randomizedBallots, anytimeResults)
+        await replyObsolete(interaction, slashCommands.pollUpdateCommand)
     }
 }
 

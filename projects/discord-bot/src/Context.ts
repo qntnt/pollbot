@@ -1,10 +1,13 @@
-import { ButtonInteraction, CacheType, Client, ClientApplication, CommandInteraction, Guild, GuildMember, InteractionDeferReplyOptions, InteractionReplyOptions, Message, MessageEmbed, MessageOptions, MessagePayload, MessageReaction, PartialUser, Team, TeamMember, TextBasedChannel, TextChannel, User, WebhookMessageOptions } from 'discord.js'
+import { ButtonInteraction, CacheType, Client, ClientApplication, CommandInteraction, Guild, GuildMember, InteractionDeferReplyOptions, InteractionReplyOptions, Message, MessageEmbed, MessageOptions, MessagePayload, MessageReaction, PartialUser, Role, Team, TeamMember, TextBasedChannel, TextChannel, User, WebhookMessageOptions } from 'discord.js'
 import { Poll } from './models'
 import { delay } from '@qntnt/ts-utils/lib/promise'
 import { isTeam, PollbotPermission, isGuildMember } from './commands'
 import { APIMessage } from 'discord-api-types'
 import { L } from './settings'
+import { SlashCommandBuilder } from "@discordjs/builders"
 
+
+export type AnySlashCommandBuilder = SlashCommandBuilder | Omit<SlashCommandBuilder, 'addSubcommandGroup' | 'addSubcommand'>
 
 export type Interaction = Message | MessageReaction | CommandInteraction | ButtonInteraction
 export type InteractionType = 'Message' | 'MessageReaction' | 'CommandInteraction'
@@ -183,8 +186,27 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
         }
     }
 
+    private memberHasSomeRole(options: { roleNames: string[], caseSensitive: boolean }) {
+        for (const roleName of options.roleNames) {
+            if (this.memberHasRole(roleName, { caseSensitive: options.caseSensitive })) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private memberHasRole(roleName: string, options: { caseSensitive: boolean } = { caseSensitive: true }): boolean {
+        if (this.isCommandInteraction()) {
+            const member = this.interaction.member as GuildMember
+            const predicate = options.caseSensitive ? (r: Role) => r.name === roleName : (r: Role) => r.name.toLowerCase() === roleName.toLowerCase()
+            return member.roles.cache.some(predicate)
+        }
+        return false
+    }
+
     async checkPermissions(permissions: PollbotPermission[] = [], poll: Poll | undefined = undefined) {
         if (this.isCommandInteraction()) {
+            const member = this.interaction.member as GuildMember
             const memberPermissions = this.interaction.memberPermissions
             const hasPerm = (p: PollbotPermission) => permissions.indexOf(p) !== -1
             const isOwner = await this.isBotOwner(this.user)
@@ -204,6 +226,14 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
                 if (hasPerm('guildAdmin') && memberPermissions?.has('ADMINISTRATOR') === true) {
                     L.d('user', this.interaction.member)
                     return true
+                }
+                if (hasPerm('pollbotAdmin')) {
+                    if (this.memberHasSomeRole({
+                        roleNames: ['pollbotadmin', 'pollbot_admin', 'pollbot admin'],
+                        caseSensitive: false,
+                    })) {
+                        return true
+                    }
                 }
                 if (hasPerm('pollGuild') && this.interaction.member) {
                     return true
