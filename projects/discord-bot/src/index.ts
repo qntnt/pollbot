@@ -133,7 +133,7 @@ async function helpCommand(ctx: Context<Discord.CommandInteraction>) {
             const embed = commands.commandHelp(command)
             await ctx.interaction.reply({
                 embeds: [embed],
-                ephemeral: true,
+                ephemeral: !isPublic,
             })
         } else {
             await ctx.interaction.reply({
