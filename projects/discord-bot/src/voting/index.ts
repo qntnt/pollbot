@@ -1,11 +1,11 @@
-import columnify from "columnify";
-import { MessageEmbed } from "discord.js";
-import { POLL_ID_PREFIX } from "../commands";
-import { Ballot, Poll } from "../models";
-import { DEBUG } from "../settings";
-import { shuffled } from "../util/random";
-import { rankedPairs, showMatrix } from "./condorcet";
-import { RankingResults, RankingType, Vote } from "./interfaces";
+import columnify from "columnify"
+import { MessageEmbed } from "discord.js"
+import { POLL_ID_PREFIX } from "../commands"
+import { Ballot, Poll } from "../models"
+import { DEBUG } from "../settings"
+import { shuffled } from "../util/random"
+import { rankedPairs, showMatrix } from "./condorcet"
+import { RankingResults, RankingType, Vote } from "./interfaces"
 
 export function computeResults(poll: Poll, ballots: Ballot[]): RankingResults | undefined {
     const optionKeys = Object.keys(poll?.options ?? {}).sort()
@@ -38,9 +38,11 @@ export function resultsSummary(poll: Poll, results: RankingResults): MessageEmbe
         `Ballot count: ${results.metrics.voteCount}\n` +
         `Time to compute: ${results.metrics.computeDuration.toFormat('S')}ms\n`
     )
-    const embed = new MessageEmbed()
-        .addField(poll.topic, '```'+finalRankings+'```')
-    
+    const embed = new MessageEmbed({
+        title: poll.topic,
+        description: '```' + finalRankings + '```'
+    })
+
     const closeCalls = []
     for (let i = 1; i < results.finalRankings.length; i++) {
         const [prev, prevScore] = results.finalRankings[i - 1]
@@ -52,12 +54,12 @@ export function resultsSummary(poll: Poll, results: RankingResults): MessageEmbe
 
     if (closeCalls.length > 0) {
         const closeCallMsg = closeCalls.map(([p, c]) => `- \`${poll.options[p]}\` beat \`${poll.options[c]}\``).join('\n')
-        embed.addField('These were close calls!', closeCallMsg)
+        embed.addField('These were close calls!', closeCallMsg.substring(0, 1024))
     }
 
     embed
-        .addField('Metrics', metrics)
-        .addField('Info', footer)
+        .addField('Metrics', metrics.substring(0, 1024))
+        .addField('Info', footer.substring(0, 1024))
         .setFooter(`${POLL_ID_PREFIX}${poll.id}`)
     return embed
 }

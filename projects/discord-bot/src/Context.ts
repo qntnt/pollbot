@@ -250,6 +250,7 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
         if (this._application === undefined) {
             const client = await this.client()
             this._application = client.application as ClientApplication
+            this._application = await this._application.fetch()
         }
         return this._application
     }
@@ -259,6 +260,7 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
             return this._botOwner
         }
         const app = await this.application()
+        L.d('App', app.id, app.owner)
         this._botOwner = app.owner ?? undefined
         return this._botOwner
     }
@@ -269,7 +271,7 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
             payload = {
                 embeds: [
                     new MessageEmbed({
-                        description: response,
+                        description: response.substring(0, 1024),
                     })
                 ]
             }
