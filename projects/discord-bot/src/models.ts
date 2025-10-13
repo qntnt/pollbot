@@ -1,8 +1,6 @@
 import { 
     PollFeatureDTO,
 } from 'idl/lib/polls/v1/polls'
-import { kill } from 'process'
-import { reverseLookup } from './util/record'
 export {
     PollDTO as Poll,
     PollFeatureDTO as PollFeature,

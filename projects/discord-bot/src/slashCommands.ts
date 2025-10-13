@@ -3,63 +3,6 @@ import { REST } from "@discordjs/rest"
 import { Routes } from "discord-api-types/v9"
 import { DISCORD_CLIENT_ID, DISCORD_TOKEN } from "./settings"
 
-export const pollCommand = new SlashCommandBuilder()
-    .setName('poll')
-    .setDescription('Poll command')
-    .addSubcommand((subcommand) =>
-        subcommand
-            .setName('create')
-            .setDescription('[OBSOLETE] Use /poll_create')
-    )
-    .addSubcommand((subcommand) =>
-        subcommand
-            .setName('results')
-            .setDescription('[OBSOLETE] Use /poll_results')
-    )
-    .addSubcommand((subcommand) =>
-        subcommand
-            .setName('close')
-            .setDescription('[OBSOLETE] Use /poll_close')
-    )
-    .addSubcommand((subcommand) =>
-        subcommand
-            .setName('audit')
-            .setDescription('[OBSOLETE] Use /poll_audit. Please set permissions for this command in your Discord settings')
-    )
-    .addSubcommand((subcommand) =>
-        subcommand
-            .setName('update')
-            .setDescription('[OBSOLETE] Use /poll_update.')
-    )
-
-export const pollCreateCommand = new SlashCommandBuilder()
-    .setName('poll_create')
-    .setDescription('Create a poll')
-    .addStringOption(option =>
-        option
-            .setName('topic')
-            .setDescription('The topic of the poll')
-            .setRequired(true)
-    )
-    .addStringOption(option =>
-        option
-            .setName('options')
-            .setDescription('Comma-separated poll options')
-            .setRequired(true)
-    )
-    .addBooleanOption(option =>
-        option
-            .setName('randomized_ballots')
-            .setDescription('Enables randomized ballot option ordering if true. (default: True)')
-            .setRequired(false)
-    )
-    .addBooleanOption(option =>
-        option
-            .setName('anytime_results')
-            .setDescription('Allows users to view results before the poll is closed. (default: True)')
-            .setRequired(false)
-    )
-
 export const pollResultsCommand = new SlashCommandBuilder()
     .setName('poll_results')
     .setDescription('View poll results')
@@ -96,38 +39,6 @@ export const pollAuditCommand = new SlashCommandBuilder()
             .setRequired(true)
     )
 
-export const pollUpdateCommand = new SlashCommandBuilder()
-    .setName('poll_update')
-    .setDescription('Update a poll')
-    .addStringOption(option =>
-        option
-            .setName('poll_id')
-            .setDescription('The poll id to update')
-            .setRequired(true)
-    )
-    .addStringOption(option =>
-        option
-            .setName('topic')
-            .setDescription('Update the poll\'s topic')
-    )
-    .addStringOption(option =>
-        option
-            .setName('closes_at')
-            .setDescription('Update the poll\'s closing time. ISO-format')
-    )
-    .addBooleanOption(option =>
-        option
-            .setName('randomized_ballots')
-            .setDescription('Enables randomized ballot option ordering if true. (default: True)')
-            .setRequired(false)
-    )
-    .addBooleanOption(option =>
-        option
-            .setName('anytime_results')
-            .setDescription('Allows users to view results before the poll is closed. (default: True)')
-            .setRequired(false)
-    )
-
 export const deleteMyUserDataCommand = new SlashCommandBuilder()
     .setName('unsafe_delete_my_user_data')
     .setDescription(`Deletes all of your polls and ballots. This is cannot be reversed.`)
@@ -138,15 +49,10 @@ export const deleteMyUserDataCommand = new SlashCommandBuilder()
             .setRequired(true)
     )
 
-const obsoleteCommands = [
-    pollCommand]
-
 const nonHelpCommands = [
-    pollCreateCommand,
     pollResultsCommand,
     pollCloseCommand,
     pollAuditCommand,
-    pollUpdateCommand,
     deleteMyUserDataCommand,
 ]
 
@@ -173,11 +79,10 @@ const okCommands = [
 ]
 
 const commands = [
-    ...obsoleteCommands,
     ...okCommands,
 ]
 
-export function matchCommand(commandName: string) {
+export function matchCommand(commandName: string): Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup"> | undefined {
     return okCommands.find(c => c.name === commandName)
 }
 
@@ -185,10 +90,9 @@ const clientId = DISCORD_CLIENT_ID
 
 const rest = new REST({ version: '9' }).setToken(DISCORD_TOKEN)
 
-export async function registerCommands() {
+export async function registerCommands(): Promise<void> {
     try {
         console.log('Started refreshing application (/) commands.')
-
         await rest.put(
             Routes.applicationCommands(clientId),
             { body: commands },

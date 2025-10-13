@@ -1,25 +1,24 @@
-import { ButtonInteraction, CommandInteraction, DiscordAPIError, EnumValueMapped, GuildMember, Message, MessageActionRow, MessageAttachment, MessageButton, MessageEditOptions, MessageEmbed, MessageEmbedImage, MessageReaction, NewsChannel, PartialMessage, PartialUser, Team, TextBasedChannel, TextChannel, User } from 'discord.js'
+import { ButtonInteraction, CommandInteraction, GuildMember, Message, MessageAttachment, MessageEditOptions, MessageEmbed, MessageReaction, PartialMessage, PartialUser, Team, User } from 'discord.js'
 import moment from 'moment-timezone'
-import { Option, PollOptionKey, Poll, PollConfig, PollId, Vote, PollFeature, POLL_FEATURES_MAPPER } from './models'
+import { PollOptionKey, Poll, PollId, Vote, PollFeature } from './models'
 import storage from './storage'
 import { computeResults, resultsSummary } from './voting'
 import { showMatrix } from './voting/condorcet'
 import { L, PREFIX } from './settings'
 import { reverseLookup } from './util/record'
-import { DateTime } from 'luxon'
 import { AnySlashCommandBuilder, AnyUser, Context, Interaction } from './Context'
 import { PollMetricsDTO } from 'idl/lib/polls/v1/polls'
-import { deleteMyUserDataCommand, helpCommand, pollAuditCommand, pollCloseCommand, pollCreateCommand, pollResultsCommand, pollUpdateCommand } from './slashCommands'
+import { deleteMyUserDataCommand, helpCommand, pollAuditCommand, pollCloseCommand, pollResultsCommand } from './slashCommands'
 import { APIApplicationCommandOption } from 'discord-api-types'
 
+const SUNSET_NOTICE = `**Pollbot is sunsetting**. This means you can't create new polls or edit existing polls.
+You'll be able to close, review, and audit polls for a limited time frame (until at least Nov 13, 2025), after which point Pollbot will be permanently offline.
+`
+
 export const POLLBOT_PREFIX = PREFIX
-export const CREATE_POLL_COMMAND = `${POLLBOT_PREFIX} poll`
 export const CLOSE_POLL_COMMAND = `${POLLBOT_PREFIX} close`
 export const POLL_RESULTS_COMMAND = `${POLLBOT_PREFIX} results`
 export const AUDIT_POLL_COMMAND = `${POLLBOT_PREFIX} audit`
-export const ADD_POLL_FEATURES_COMMAND = `${POLLBOT_PREFIX} addFeatures`
-export const REMOVE_POLL_FEATURES_COMMAND = `${POLLBOT_PREFIX} removeFeatures`
-export const SET_POLL_PROPERTIES_COMMAND = `${POLLBOT_PREFIX} set`
 export const DELETE_MY_USER_DATA_COMMAND = `${POLLBOT_PREFIX} deleteMyUserData`
 
 export const POLL_ID_PREFIX = 'poll#'
@@ -28,6 +27,10 @@ export const POLL_ID_PREFIX = 'poll#'
 export function isTeam(userTeam: User | Team | null | undefined): userTeam is Team {
     return userTeam !== undefined && (userTeam as Team).ownerId !== null
 }
+
+// TODO add an admin command for sending a message to all Pollbot servers indicating it's moving to sunsetting (read only) mode: mention self-hosting option and link to repository.
+// TODO remove writing commands
+
 
 function simpleEmbed(title: string, description?: string) {
     return new MessageEmbed({
@@ -42,88 +45,6 @@ function simpleSendable(title: string, description?: string) {
             simpleEmbed(title, description)
         ],
     }
-}
-
-export async function createPoll(
-    _ctx: Context<CommandInteraction>,
-    topic: string,
-    optionsString: string,
-    randomizedBallots: boolean,
-    anytimeResults: boolean,
-) {
-    const ctx = await _ctx.defer()
-    const optionsList = optionsString
-        .split(',')
-        .map(o => o.trim())
-        .filter(o => o !== '')
-    if (optionsList.length < 2) {
-        return await ctx.editReply(simpleSendable(
-            'You must specify at least two options in a poll.'
-        ))
-    }
-    if (optionsList.length > 26) {
-        return await ctx.editReply(simpleSendable(
-            'Polls cannot have more than 26 options'
-        ))
-    }
-    const options: Record<PollOptionKey, Option> = {}
-    optionsList.forEach((o, i) => {
-        const key = String.fromCharCode(97 + i)
-        options[key] = o
-    })
-    if (!ctx.guild) {
-        await ctx.editReply('Couldn\'t determine your server...')
-        throw new Error('Couldn\'t determine guild...')
-    }
-    const features: PollFeature[] = []
-    if (!randomizedBallots) {
-        features.push(PollFeature.DISABLE_RANDOMIZED_BALLOTS)
-    }
-    if (!anytimeResults) {
-        features.push(PollFeature.DISABLE_ANYTIME_RESULTS)
-    }
-
-
-    const context: Poll['context'] = {
-        $case: 'discord',
-        discord: {
-            guildId: ctx.guild.id,
-            ownerId: ctx.user.id,
-        }
-    }
-    const pollConfig: PollConfig = {
-        topic,
-        options,
-        features,
-        context,
-    }
-    const poll = await storage.createPoll(pollConfig)
-    if (!poll) {
-        return await ctx.editReply(simpleSendable(
-            'I couldn\'t make this poll. Something went wrong.'
-        ))
-    }
-    const metrics = await storage.getPollMetrics(poll.id)
-    const pollMsgEmbed = createPollEmbed(ctx, poll, metrics)
-    const pollMessage = await ctx.editReply({
-        embeds: [pollMsgEmbed],
-        components: [
-            new MessageActionRow()
-                .addComponents(
-                    new MessageButton()
-                        .setCustomId('request_ballot')
-                        .setLabel('Request Ballot')
-                        .setStyle('PRIMARY')
-                )
-        ]
-    })
-    if (poll.context?.$case === 'discord') {
-        poll.context.discord.messageRef = {
-            channelId: pollMessage.channelId,
-            id: pollMessage.id
-        }
-    }
-    await storage.updatePoll(poll.id, poll)
 }
 
 function createPollEmbed(
@@ -149,120 +70,6 @@ function createPollEmbed(
         .setFooter({
             text: footerText,
         })
-}
-
-export async function updatePoll(
-    _ctx: Context<CommandInteraction>,
-    pollId: string,
-    topic?: string,
-    closesAt?: string,
-    randomizedBallots?: boolean,
-    anytimeResults?: boolean,
-) {
-    const ctx = await _ctx.defer({ ephemeral: true })
-    const poll = await storage.getPoll(pollId)
-    if (!poll) {
-        return await ctx.editReply({
-            ...simpleSendable(`I couldn't find poll ${pollId}`),
-            ephemeral: true,
-        })
-    }
-
-    try {
-        await ctx.checkPermissions(['botOwner', 'guildAdmin', 'pollbotAdmin', 'pollOwner'], poll)
-    } catch {
-        return await ctx.editReply({ ...simpleSendable(`You don't have permission to edit this poll`), ephemeral: true })
-    }
-
-    let embed = new MessageEmbed({ description: `Poll#${poll.id} updated!` })
-    if (topic) {
-        poll.topic = topic
-        embed = embed.addField('topic', topic)
-    }
-    if (closesAt) {
-        const date = DateTime.fromISO(closesAt)
-        if (!date.isValid) {
-            return await ctx.editReply({ ...simpleSendable(`The date for \`closes_at\` is invalid.`), ephemeral: true })
-        }
-        poll.closesAt = date.toJSDate()
-        embed = embed
-            .setFooter('closes_at')
-            .setTimestamp(date.toMillis())
-    }
-    if (randomizedBallots !== undefined) {
-        if (!randomizedBallots) {
-            addPollFeature(poll, 'disableRandomizedBallots')
-            embed = embed.addField('randomized_ballots', 'disabled')
-        } else {
-            removePollFeature(poll, 'disableRandomizedBallots')
-            embed = embed.addField('randomized_ballots', 'enabled')
-        }
-    }
-    if (anytimeResults !== undefined) {
-        if (anytimeResults) {
-            removePollFeature(poll, 'disableAnytimeResults')
-            embed = embed.addField('anytime_results', 'enabled')
-        } else {
-            addPollFeature(poll, 'disableAnytimeResults')
-            embed = embed.addField('anytime_results', 'disabled')
-        }
-    }
-    await storage.updatePoll(poll.id, poll)
-    await ctx.editReply({
-        embeds: [
-            embed
-        ],
-        ephemeral: true,
-    })
-    try {
-        const metrics = await storage.getPollMetrics(poll.id)
-        await updatePollMessage(ctx, poll, (channel) => ({
-            embeds: [
-                createPollEmbed(ctx, poll, metrics, channel)
-            ]
-        }))
-    } catch (e) {
-        if (e instanceof DiscordAPIError && e.code === 50001) {
-            await ctx.followUp({
-                embeds: [
-                    new MessageEmbed({
-                        color: 'RED',
-                        description: 'I couldn\'t update the poll message with your changes. Please make sure that I\'m invited to the poll channel and my permissions are correct.'
-                    })
-                ]
-            })
-        }
-    }
-}
-
-function addPollFeature(poll: Poll, featureOrName: PollFeature | keyof typeof POLL_FEATURES_MAPPER) {
-    let feature = PollFeature.UNKNOWN
-    if (typeof (featureOrName) === 'string') {
-        feature = POLL_FEATURES_MAPPER[featureOrName]
-    } else {
-        feature = featureOrName
-    }
-    if (!poll.features) {
-        poll.features = [feature]
-    } else {
-        if (poll.features.indexOf(feature) === -1) {
-            poll.features.push(feature)
-        }
-    }
-}
-function removePollFeature(poll: Poll, featureOrName: PollFeature | keyof typeof POLL_FEATURES_MAPPER) {
-    let feature = PollFeature.UNKNOWN
-    if (typeof (featureOrName) === 'string') {
-        feature = POLL_FEATURES_MAPPER[featureOrName]
-    } else {
-        feature = featureOrName
-    }
-    if (poll.features) {
-        const i = poll.features.indexOf(feature)
-        if (i !== -1) {
-            poll.features.splice(i, 1)
-        }
-    }
 }
 
 async function getPollChannel(ctx: Context, poll: Poll) {
@@ -319,7 +126,7 @@ async function updatePollMessage(
     }
 }
 
-export async function closePoll(_ctx: Context<Interaction>, pollId: string) {
+export async function closePoll(_ctx: Context<Interaction>, pollId: string): Promise<Message<boolean>> {
     const ctx = await _ctx.defer()
     const poll = await storage.getPoll(pollId)
     if (!poll) {
@@ -357,7 +164,7 @@ export async function closePoll(_ctx: Context<Interaction>, pollId: string) {
     }
 }
 
-export async function pollResults(_ctx: Context<CommandInteraction>, pollId: string, ephemeral: boolean) {
+export async function pollResults(_ctx: Context<CommandInteraction>, pollId: string, ephemeral: boolean): Promise<Message<boolean>> {
     const ctx = await _ctx.defer({ ephemeral })
     const poll = await storage.getPoll(pollId)
     if (!poll) {
@@ -420,7 +227,7 @@ function findPollId(message: Message | PartialMessage): string | undefined {
     return pollId
 }
 
-export async function createBallotFromButton(ctx: Context<ButtonInteraction>) {
+export async function createBallotFromButton(ctx: Context<ButtonInteraction>): Promise<Message<boolean> | undefined> {
     const user = ctx.interaction.user
     const message = await ctx.resolveMessage(ctx.interaction.message)
     const pollId = findPollId(message)
@@ -518,7 +325,7 @@ export async function createBallotFromButton(ctx: Context<ButtonInteraction>) {
     }))
 }
 
-export async function createBallot(ctx: Context<MessageReaction>, reaction: MessageReaction, user: User | PartialUser) {
+export async function createBallot(ctx: Context<MessageReaction>, reaction: MessageReaction, user: User | PartialUser): Promise<Message<boolean> | undefined> {
     const pollId = findPollId(reaction.message)
     if (!pollId) {
         L.d(`Couldn't find poll for new ballot: ${reaction.message.content?.substring(0, POLL_ID_PREFIX.length)}`)
@@ -594,7 +401,7 @@ export async function createBallot(ctx: Context<MessageReaction>, reaction: Mess
     }))
 }
 
-export async function submitBallot(ctx: Context<Message>, message: Message) {
+export async function submitBallot(ctx: Context<Message>, message: Message): Promise<Message<boolean> | undefined> {
     const limit = 50
     const history = await message.channel.messages.fetch({ limit })
     const lastBallotText = history.find(m => findPollId(m) !== undefined)
@@ -710,7 +517,7 @@ function optionHelp(option: APIApplicationCommandOption) {
 export function commandHelp(command: AnySlashCommandBuilder): MessageEmbed {
     const embed = new MessageEmbed({
         title: `Help: \`/${command.name}\``,
-        description: command.description,
+        description: SUNSET_NOTICE + '\n\n' + command.description,
     })
     const options = command.options.map(o => o.toJSON())
     const requiredOptions = options.filter(o => o.required === true)
@@ -724,21 +531,21 @@ export function commandHelp(command: AnySlashCommandBuilder): MessageEmbed {
     return embed
 }
 
-export function helpEmbed() {
+export function helpEmbed(): MessageEmbed {
     return new MessageEmbed({
         title: 'Help',
     })
+        .addField('IMPORTANT NOTICE!', SUNSET_NOTICE)
         .addField(
             'General Commands',
+            shortCommandHelp(pollResultsCommand) +
+            '\n' +
             shortCommandHelp(helpCommand)
-        )
+    )
         .addField(
-            'Poll Commands',
-            `${shortCommandHelp(pollCreateCommand)}\n`
-            + `${shortCommandHelp(pollResultsCommand)}\n\n`
-            + `_These are privileged commands for poll owners, admins, pollbot admins, and bot owners_\n`
+            'Privileged Commands',
+            `_These are privileged commands for poll owners, admins, pollbot admins, and bot owners_\n`
             + `${shortCommandHelp(pollCloseCommand)}\n`
-            + `${shortCommandHelp(pollUpdateCommand)}\n`
             + `${shortCommandHelp(pollAuditCommand)}\n`
         )
         .addField(
@@ -751,7 +558,7 @@ export function helpEmbed() {
         )
 }
 
-export async function help(ctx: Context<Message>, message: Message) {
+export async function help(ctx: Context<Message>, message: Message): Promise<void> {
     message.channel.send({
         embeds: [
             helpEmbed()
@@ -797,7 +604,7 @@ async function belongsToGuild(ctx: Context, poll: Poll, bypassForBotOwner = true
     }
 }
 
-export async function auditPoll(_ctx: Context<CommandInteraction>, pollId: string) {
+export async function auditPoll(_ctx: Context<CommandInteraction>, pollId: string): Promise<Message<boolean> | undefined> {
     const ctx = await _ctx.defer({ ephemeral: true })
     const poll = await storage.getPoll(pollId)
     L.d('Poll', poll)
@@ -907,7 +714,7 @@ export async function auditPoll(_ctx: Context<CommandInteraction>, pollId: strin
     })
 }
 
-export async function deleteMyUserData(_ctx: Context<CommandInteraction>, user: User) {
+export async function deleteMyUserData(_ctx: Context<CommandInteraction>, user: User): Promise<Message<boolean> | undefined> {
     const ctx = await _ctx.defer({ ephemeral: true })
     if (ctx.user.id !== user.id) {
         return await ctx.editReply('The user does not match your account.')

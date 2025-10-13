@@ -1,7 +1,7 @@
-import { ButtonInteraction, CacheType, Client, ClientApplication, CommandInteraction, Guild, GuildMember, InteractionDeferReplyOptions, InteractionReplyOptions, Message, MessageEmbed, MessageOptions, MessagePayload, MessageReaction, PartialUser, Role, Team, TeamMember, TextBasedChannel, TextChannel, User, WebhookMessageOptions } from 'discord.js'
+import { ButtonInteraction, Client, ClientApplication, CommandInteraction, Guild, GuildMember, InteractionDeferReplyOptions, InteractionReplyOptions, Message, MessageEmbed, MessageOptions, MessageReaction, Role, Team, TeamMember, TextBasedChannel, User } from 'discord.js'
 import { Poll } from './models'
 import { delay } from '@qntnt/ts-utils/lib/promise'
-import { isTeam, PollbotPermission, isGuildMember } from './commands'
+import { isTeam, PollbotPermission } from './commands'
 import { APIMessage } from 'discord-api-types'
 import { L } from './settings'
 import { SlashCommandBuilder } from "@discordjs/builders"
@@ -46,7 +46,7 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
             this.init()
     }
 
-    async init() {
+    async init(): Promise<void> {
         this._application = await this.fetchApplication()
         this._botOwner = await this.fetchOwner()
         this._isInitialized = true
@@ -204,7 +204,7 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
         return false
     }
 
-    async checkPermissions(permissions: PollbotPermission[] = [], poll: Poll | undefined = undefined) {
+    async checkPermissions(permissions: PollbotPermission[] = [], poll: Poll | undefined = undefined): Promise<boolean> {
         if (this.isCommandInteraction()) {
             const member = this.interaction.member as GuildMember
             const memberPermissions = this.interaction.memberPermissions
@@ -281,7 +281,7 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
         return payload
     }
 
-    async directMessage(response: string | MessageOptions) {
+    async directMessage(response: string | MessageOptions): Promise<void> {
         const payload = this.messagePayload(response)
         const u = await this.fetchUser()
         if (u.dmChannel) {
@@ -315,7 +315,7 @@ export class Context<I extends Interaction | undefined = Interaction | undefined
         if (!this.hasInteraction()) throw new Error('Cannot reply with no interaction')
         const payload: MessageOptions = this.messagePayload(response)
         if (this.isCommandInteraction()) {
-            let commandInteraction = (this as Context<CommandInteraction, M>).interaction
+            const commandInteraction = (this as Context<CommandInteraction, M>).interaction
             let msg: Message | APIMessage
             if (!this.interaction.replied) {
                 msg = await commandInteraction.editReply({

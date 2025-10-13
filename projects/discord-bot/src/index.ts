@@ -4,7 +4,6 @@ import * as commands from './commands'
 import { AnySlashCommandBuilder, Context } from "./Context"
 import storage from './storage'
 import * as slashCommands from './slashCommands'
-import { SlashCommandBuilder } from "@discordjs/builders"
 
 const client = new Discord.Client({
     intents: [
@@ -55,12 +54,6 @@ async function handleCommandInteraction(interaction: Discord.CommandInteraction)
     const ctx = context.withCommandInteraction(interaction)
     try {
         switch (interaction.commandName) {
-            case slashCommands.pollCommand.name:
-                await pollCommand(ctx)
-                break
-            case slashCommands.pollCreateCommand.name:
-                await pollCreate(ctx)
-                break
             case slashCommands.pollResultsCommand.name:
                 await pollResults(ctx)
                 break
@@ -70,13 +63,11 @@ async function handleCommandInteraction(interaction: Discord.CommandInteraction)
             case slashCommands.pollAuditCommand.name:
                 await pollAudit(ctx)
                 break
-            case slashCommands.pollUpdateCommand.name:
-                await pollUpdate(ctx)
-                break
             case slashCommands.helpCommand.name:
                 await helpCommand(ctx)
                 break
             case slashCommands.deleteMyUserDataCommand.name:
+                // eslint-disable-next-line no-case-declarations
                 const user = interaction.options.getUser('confirm_user', true)
                 await commands.deleteMyUserData(ctx, user)
                 break
@@ -138,7 +129,7 @@ async function helpCommand(ctx: Context<Discord.CommandInteraction>) {
         } else {
             await ctx.interaction.reply({
                 embeds: [new Discord.MessageEmbed({
-                    title: `Couldn\'t recognize the command \`${commandName}\``,
+                    title: `Couldn't recognize the command \`${commandName}\``,
                 })],
                 ephemeral: true,
             })
@@ -149,16 +140,6 @@ async function helpCommand(ctx: Context<Discord.CommandInteraction>) {
             ephemeral: !isPublic,
         })
     }
-}
-
-async function pollCreate(ctx: Context<Discord.CommandInteraction>) {
-    const interaction = ctx.interaction
-    const topic = interaction.options.getString('topic', true)
-    const optionsString = interaction.options.getString('options', true)
-    const randomizedBallots = interaction.options.getBoolean('randomized_ballots') ?? true
-    const anytimeResults = interaction.options.getBoolean('anytime_results') ?? true
-    if (interaction.channel?.type !== 'GUILD_TEXT') return
-    await commands.createPoll(ctx, topic, optionsString, randomizedBallots, anytimeResults)
 }
 
 async function pollResults(ctx: Context<Discord.CommandInteraction>) {
@@ -178,54 +159,6 @@ async function pollAudit(ctx: Context<Discord.CommandInteraction>) {
     await commands.auditPoll(ctx, pollId)
 }
 
-async function pollUpdate(ctx: Context<Discord.CommandInteraction>) {
-    const interaction = ctx.interaction
-    const pollId = interaction.options.getString('poll_id', true)
-    const topic = interaction.options.getString('topic') ?? undefined
-    const closesAt = interaction.options.getString('closes_at') ?? undefined
-    const randomizedBallots = interaction.options.getBoolean('randomized_ballots') ?? undefined
-    const anytimeResults = interaction.options.getBoolean('anytime_results') ?? true
-    await commands.updatePoll(ctx, pollId, topic, closesAt, randomizedBallots, anytimeResults)
-}
-
-async function replyObsolete(interaction: Discord.CommandInteraction, newCommand: AnySlashCommandBuilder) {
-    const subcommand = interaction.options.getSubcommand()
-    await interaction.reply({
-        embeds: [
-            new Discord.MessageEmbed({
-                title: `\`/${interaction.commandName}${subcommand ? ' ' + subcommand : ''}\` is obsolete.`,
-                description: `Use \`/${newCommand.name}\` instead.`,
-                color: 'YELLOW',
-                footer: { text: 'This slash command will be removed after June 10th 2022.' }
-            })
-                .addField('Why?', 'Discord now supports slash command permissions. They don\'t support permissions for sub-commands yet, so this migration will give you more control over how you configure pollbot.')
-                .addField('Do I need to do anything?', 'If you just want to use pollbot as you have before, no action is necessary. Just use the new top-level commands instead of the old sub-commands.')
-                .addField('How do I update slash command permissions?', 'Go to your server settings. On the sidebar, click `Integrations`. Under "Bots and Apps", click `pollbot`. Under "Commands", modify command permissions. If the new slash commands don\'t show up for you, try reinviting pollbot to your server by clicking on it\'s profile and clicking the `Add to Server` button.')
-        ],
-        ephemeral: true,
-    })
-}
-
-async function pollCommand(ctx: Context<Discord.CommandInteraction>) {
-    const interaction = ctx.interaction
-    const subcommand = interaction.options.getSubcommand()
-    if (subcommand === 'create') {
-        await replyObsolete(interaction, slashCommands.pollCreateCommand)
-    }
-    else if (subcommand === 'close') {
-        await replyObsolete(interaction, slashCommands.pollCloseCommand)
-    }
-    else if (subcommand === 'results') {
-        await replyObsolete(interaction, slashCommands.pollResultsCommand)
-    }
-    else if (subcommand === 'audit') {
-        await replyObsolete(interaction, slashCommands.pollAuditCommand)
-    }
-    else if (subcommand === 'update') {
-        await replyObsolete(interaction, slashCommands.pollUpdateCommand)
-    }
-}
-
 client.on('messageCreate', async message => {
     try {
         const ctx = context.withMessage(message)
@@ -241,38 +174,6 @@ client.on('messageCreate', async message => {
         if (message.channel.type !== 'GUILD_TEXT') return
         // Public channel commands
         if (!isCommand(message, commands.POLLBOT_PREFIX)) {
-            return
-        }
-        if (isCommand(message, commands.CREATE_POLL_COMMAND)) {
-            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll create`. If slash commands aren\'t available, have a server admin re-invite pollbot to your server.')
-            return
-        }
-        if (isCommand(message, commands.CLOSE_POLL_COMMAND)) {
-            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll close`. If slash commands aren\'t available, have a server admin re-invite pollbot to your server.')
-            return
-        }
-        if (isCommand(message, commands.POLL_RESULTS_COMMAND)) {
-            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll results`. If slash commands aren\'t available, have a server admin re-invite pollbot to your server.')
-            return
-        }
-        if (isCommand(message, commands.AUDIT_POLL_COMMAND)) {
-            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll audit`. If slash commands aren\'t available, have a server admin re-invite pollbot to your server.')
-            return
-        }
-        if (isCommand(message, commands.SET_POLL_PROPERTIES_COMMAND)) {
-            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll update`. If slash commands aren\'t available, have a server admin re-invite pollbot to your server.')
-            return
-        }
-        if (isCommand(message, commands.ADD_POLL_FEATURES_COMMAND)) {
-            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll update`. If slash commands aren\'t available, have a server admin re-invite pollbot to your server.')
-            return
-        }
-        if (isCommand(message, commands.REMOVE_POLL_FEATURES_COMMAND)) {
-            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/poll update`. If slash commands aren\'t available, have a server admin re-invite pollbot to your server.')
-            return
-        }
-        if (isCommand(message, commands.DELETE_MY_USER_DATA_COMMAND)) {
-            await ctx.replyOrEdit('This command is obsolete. Please use the slash command `/delete_my_user_data`. If slash commands aren\'t available, have a server admin re-invite pollbot to your server.')
             return
         }
         await commands.help(ctx, message)
@@ -323,7 +224,7 @@ client.on('raw', async packet => {
         let message
         try {
             message = await channel.messages.fetch(packet.d.message_id)
-        } catch (e: any) {
+        } catch (e: unknown) {
             L.d(e)
             return
         }
@@ -341,7 +242,7 @@ client.on('raw', async packet => {
         if (packet.t === 'MESSAGE_REACTION_ADD') {
             client.emit('messageReactionAdd', reaction, user)
         }
-    } catch (e: any) {
+    } catch (e: unknown) {
         L.d('Error in raw reaction add')
         L.d(e)
     }

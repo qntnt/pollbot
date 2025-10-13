@@ -18,6 +18,7 @@ export const PREFIX = ENV_PREFIXES[ENV]
 export const DEBUG = ENV !== 'production'
 
 export class L {
+  // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types, @typescript-eslint/no-explicit-any
   public static d(...args: any): void {
     if (DEBUG) {
         console.log(...args)
